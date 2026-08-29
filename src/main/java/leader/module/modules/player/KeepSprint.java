@@ -15,7 +15,6 @@ import net.minecraft.client.Minecraft;
 public class KeepSprint extends Module {
     private static final Minecraft mc = Minecraft.getMinecraft();
 
-    // 0 = Vanilla, 1 = Legit, 2 = Grim, 3 = Buffer
     public final ModeProperty mode = new ModeProperty("Mode", 0, new String[]{"Vanilla", "Legit", "Grim", "Buffer"});
 
     public final BooleanProperty onHurt = new BooleanProperty("OnHurt", false, () -> mode.getValue() == 1 || mode.getValue() == 3);
@@ -35,7 +34,7 @@ public class KeepSprint extends Module {
         super("KeepSprint", false);
     }
     public boolean isBufferMode() {
-        return mode.getValue() == 3 && (mc.thePlayer.hurtTime == 0 || onHurt.getValue());
+        return mode.getValue() == 3;
     }
 
     public boolean shouldKeepSprint() {

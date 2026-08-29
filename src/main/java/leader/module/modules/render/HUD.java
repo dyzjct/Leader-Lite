@@ -46,6 +46,7 @@ public class HUD extends Module {
     public final IntProperty offsetY = new IntProperty("offset-y", 2, 0, 255);
     public final FloatProperty scale = new FloatProperty("scale", 1.0F, 0.5F, 1.5F);
     public final PercentProperty background = new PercentProperty("background", 25);
+    public final IntProperty rowSpacing = new IntProperty("row-spacing", 0, 0, 10);
     public final BooleanProperty showBar = new BooleanProperty("bar", true);
     public final BooleanProperty shadow = new BooleanProperty("shadow", true);
     public final BooleanProperty suffixes = new BooleanProperty("suffixes", true);
@@ -275,9 +276,9 @@ public class HUD extends Module {
                 float sx = x / this.scale.getValue();
                 float sy = y / this.scale.getValue();
                 float bgX1 = sx - 1.0F - (this.posX.getValue() == 0 ? 0.0F : totalWidth);
-                float bgY1 = sy - (this.posY.getValue() == 0 ? (offset == 0L ? 1.0F : 0.0F) : (this.shadow.getValue() ? 1.0F : 0.0F));
+                float bgY1 = sy - this.rowSpacing.getValue() - (this.posY.getValue() == 0 ? (offset == 0L ? 1.0F : 0.0F) : (this.shadow.getValue() ? 1.0F : 0.0F));
                 float bgX2 = sx + 1.0F + (this.posX.getValue() == 0 ? totalWidth : 0.0F);
-                float bgY2 = sy + height + (this.posY.getValue() == 0 ? (this.shadow.getValue() ? 1.0F : 0.0F) : (offset == 0L ? 1.0F : 0.0F));
+                float bgY2 = sy + height + this.rowSpacing.getValue() + (this.posY.getValue() == 0 ? (this.shadow.getValue() ? 1.0F : 0.0F) : (offset == 0L ? 1.0F : 0.0F));
                 float textX = sx - (this.posX.getValue() == 1 ? totalWidth : 0.0F);
                 float textY = sy;
                 listMinX = Math.min(listMinX, bgX1);
@@ -400,7 +401,7 @@ public class HUD extends Module {
                         suffixX += (float) FontManager.getStringWidth(string) + (this.shadow.getValue() ? 3.0F : 2.0F);
                     }
                 }
-                y += (height + (this.shadow.getValue() ? 1.0F : 0.0F)) * this.scale.getValue() * (this.posY.getValue() == 0 ? 1.0F : -1.0F);
+                y += (height + 2 * this.rowSpacing.getValue() + (this.shadow.getValue() ? 1.0F : 0.0F)) * this.scale.getValue() * (this.posY.getValue() == 0 ? 1.0F : -1.0F);
                 offset++;
             }
 

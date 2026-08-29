@@ -12,10 +12,12 @@ import leader.property.properties.BooleanProperty;
 import leader.property.properties.FloatProperty;
 import leader.property.properties.PercentProperty;
 import leader.property.properties.IntProperty;
+import leader.property.properties.ModeProperty;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MovingObjectPosition.MovingObjectType;
+import net.minecraft.util.Vec3;
 
 import java.util.Comparator;
 import java.util.List;
@@ -24,6 +26,7 @@ import java.util.stream.Collectors;
 public class AimAssist extends Module {
     private static final Minecraft mc = Minecraft.getMinecraft();
     private final TimerUtil timer = new TimerUtil();
+    public final ModeProperty rotationMode = new ModeProperty("rotation-mode", 0, new String[]{"Normal", "LockBox"});
     public final FloatProperty hSpeed = new FloatProperty("horizontal-speed", 3.0F, 0.0F, 10.0F);
     public final FloatProperty vSpeed = new FloatProperty("vertical-speed", 0.0F, 0.0F, 10.0F);
     public final PercentProperty smoothing = new PercentProperty("smoothing", 50);
@@ -66,6 +69,30 @@ public class AimAssist extends Module {
         return mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectType.BLOCK;
     }
 
+    private float[] getLockBoxRotation(EntityPlayer player) {
+        Vec3 eyePos = mc.thePlayer.getPositionEyes(1.0f);
+        double headY = player.posY + player.getEyeHeight();
+        double halfSize = 0.2;
+        AxisAlignedBB headBox = new AxisAlignedBB(
+                player.posX - halfSize, headY - halfSize, player.posZ - halfSize,
+                player.posX + halfSize, headY + halfSize, player.posZ + halfSize
+        );
+        Vec3 lookVec = mc.thePlayer.getLookVec();
+        double reach = this.range.getValue() * 2.0;
+        if (headBox.calculateIntercept(eyePos, eyePos.addVector(lookVec.xCoord * reach, lookVec.yCoord * reach, lookVec.zCoord * reach)) != null) {
+            return null;
+        }
+        Vec3 probe = eyePos.addVector(lookVec.xCoord * reach, lookVec.yCoord * reach, lookVec.zCoord * reach);
+        Vec3 target = RotationUtil.getClosestPointOnBox(probe, headBox);
+        float[] desired = RotationUtil.getRotations(target.xCoord, target.yCoord, target.zCoord, eyePos.xCoord, eyePos.yCoord, eyePos.zCoord);
+        float yaw = Math.min(Math.abs(this.hSpeed.getValue()), 10.0F);
+        float pitch = Math.min(Math.abs(this.vSpeed.getValue()), 10.0F);
+        return new float[]{
+                mc.thePlayer.rotationYaw + (desired[0] - mc.thePlayer.rotationYaw) * 0.1F * yaw,
+                mc.thePlayer.rotationPitch + (desired[1] - mc.thePlayer.rotationPitch) * 0.1F * pitch
+        };
+    }
+
     public AimAssist() {
         super("AimAssist", false);
     }
@@ -93,24 +120,30 @@ public class AimAssist extends Module {
                             }
                             EntityPlayer player = inRange.get(0);
                             if (!(RotationUtil.distanceToEntity(player) <= 0.0)) {
-                                AxisAlignedBB axisAlignedBB = player.getEntityBoundingBox();
-                                double collisionBorderSize = player.getCollisionBorderSize();
-                                float[] rotation = RotationUtil.getRotationsToBox(
-                                        axisAlignedBB.expand(collisionBorderSize, collisionBorderSize, collisionBorderSize),
-                                        mc.thePlayer.rotationYaw,
-                                        mc.thePlayer.rotationPitch,
-                                        180.0F,
-                                        (float) this.smoothing.getValue() / 100.0F
-                                );
-                                float yaw = Math.min(Math.abs(this.hSpeed.getValue()), 10.0F);
-                                float pitch = Math.min(Math.abs(this.vSpeed.getValue()), 10.0F);
-                                Leader.rotationManager
-                                        .setRotation(
-                                                mc.thePlayer.rotationYaw + (rotation[0] - mc.thePlayer.rotationYaw) * 0.1F * yaw,
-                                                mc.thePlayer.rotationPitch + (rotation[1] - mc.thePlayer.rotationPitch) * 0.1F * pitch,
-                                                0,
-                                                false
-                                        );
+                                if (this.rotationMode.getValue() == 1) {
+                                    float[] rotation = this.getLockBoxRotation(player);
+                                    if (rotation == null) return;
+                                    Leader.rotationManager.setRotation(rotation[0], rotation[1], 0, false);
+                                } else {
+                                    AxisAlignedBB axisAlignedBB = player.getEntityBoundingBox();
+                                    double collisionBorderSize = player.getCollisionBorderSize();
+                                    float[] rotation = RotationUtil.getRotationsToBox(
+                                            axisAlignedBB.expand(collisionBorderSize, collisionBorderSize, collisionBorderSize),
+                                            mc.thePlayer.rotationYaw,
+                                            mc.thePlayer.rotationPitch,
+                                            180.0F,
+                                            (float) this.smoothing.getValue() / 100.0F
+                                    );
+                                    float yaw = Math.min(Math.abs(this.hSpeed.getValue()), 10.0F);
+                                    float pitch = Math.min(Math.abs(this.vSpeed.getValue()), 10.0F);
+                                    Leader.rotationManager
+                                            .setRotation(
+                                                    mc.thePlayer.rotationYaw + (rotation[0] - mc.thePlayer.rotationYaw) * 0.1F * yaw,
+                                                    mc.thePlayer.rotationPitch + (rotation[1] - mc.thePlayer.rotationPitch) * 0.1F * pitch,
+                                                    0,
+                                                    false
+                                            );
+                                }
                             }
                         }
                     }

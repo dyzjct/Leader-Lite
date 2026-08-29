@@ -58,7 +58,7 @@ public class TargetHUD extends Module {
     private float lastObservedHealth = Float.NaN;
     private final List<HitParticle> hitParticles = new ArrayList<>();
     private boolean renderingFollow = false;
-    public final ModeProperty mode = new ModeProperty("mode", 0, new String[]{"DEFAULT", "TRIANGLE", "BACKGROUND", "MODERN", "INK"});
+    public final ModeProperty mode = new ModeProperty("mode", 0, new String[]{"DEFAULT", "TRIANGLE", "BACKGROUND", "MODERN", "INK", "AURA"});
     public final ModeProperty color = new ModeProperty("color", 0, new String[]{"DEFAULT", "HUD"});
     public final ModeProperty position = new ModeProperty("position", 0, new String[]{"SCREEN", "FOLLOW"});
     public final ModeProperty posX = new ModeProperty("position-x", 1, new String[]{"LEFT", "MIDDLE", "RIGHT"}, () -> this.position.getValue() == 0);
@@ -268,6 +268,9 @@ public class TargetHUD extends Module {
         } else if (this.mode.getValue() == 4) {
             cardWidth = this.getInkCardWidth(targetNameWidth, statusTextWidth, healthTextWidth, healthDiffWidth);
             cardHeight = this.getInkCardHeight();
+        } else if (this.mode.getValue() == 5) {
+            cardWidth = this.getAuraCardWidth(targetNameWidth, statusTextWidth, healthTextWidth, healthDiffWidth);
+            cardHeight = this.getAuraCardHeight();
         } else if (this.mode.getValue() == 2) {
             cardWidth = 150.0F;
             cardHeight = this.getCardHeight();
@@ -315,6 +318,8 @@ public class TargetHUD extends Module {
             renderModern(scaledResolution, targetNameText, healthText, statusText, healthDiffText, targetNameWidth, healthTextWidth, statusTextWidth, healthDiffWidth, healthRatio, targetColor, healthBarColor, healthDeltaColor, heal, (mc.thePlayer.getHealth() + mc.thePlayer.getAbsorptionAmount()) / 2.0F, abs);
         } else if (this.mode.getValue() == 4) {
             renderInk(scaledResolution, targetNameText, healthText, statusText, healthDiffText, targetNameWidth, healthTextWidth, statusTextWidth, healthDiffWidth, healthRatio, targetColor, healthBarColor, healthDeltaColor, heal, (mc.thePlayer.getHealth() + mc.thePlayer.getAbsorptionAmount()) / 2.0F, abs);
+        } else if (this.mode.getValue() == 5) {
+            renderAura(scaledResolution, targetNameText, healthText, statusText, healthDiffText, targetNameWidth, healthTextWidth, statusTextWidth, healthDiffWidth, healthRatio, targetColor, healthBarColor, healthDeltaColor, heal, (mc.thePlayer.getHealth() + mc.thePlayer.getAbsorptionAmount()) / 2.0F, abs);
         } else if (this.mode.getValue() == 2) {
             renderBackground(scaledResolution, targetNameText, healthText, targetNameWidth, healthTextWidth, healthRatio, targetColor, healthBarColor, heal, (mc.thePlayer.getHealth() + mc.thePlayer.getAbsorptionAmount()) / 2.0F, abs);
         } else if (this.mode.getValue() == 1) {
@@ -425,6 +430,11 @@ public class TargetHUD extends Module {
                             heal, health, abs);
                 } else if (this.mode.getValue() == 4) {
                     renderInk(scaledResolution, targetNameText, healthText, statusText, healthDiffText,
+                            targetNameWidth, healthTextWidth, statusTextWidth, healthDiffWidth,
+                            healthRatio, targetColor, healthBarColor, healthDeltaColor,
+                            heal, health, abs);
+                } else if (this.mode.getValue() == 5) {
+                    renderAura(scaledResolution, targetNameText, healthText, statusText, healthDiffText,
                             targetNameWidth, healthTextWidth, statusTextWidth, healthDiffWidth,
                             healthRatio, targetColor, healthBarColor, healthDeltaColor,
                             heal, health, abs);
@@ -751,8 +761,8 @@ public class TargetHUD extends Module {
         };
         Tessellator tessellator = Tessellator.getInstance();
         WorldRenderer wr = tessellator.getWorldRenderer();
-        // The fan winding ends up clockwise in window space (back face), and the
-        // plate rendering above re-enabled culling — disable it while drawing.
+        // The fan winding ends up clockwise in window space (back face), and
+        // surrounding rendering re-enables culling — disable it while drawing.
         GlStateManager.disableCull();
         wr.begin(GL11.GL_TRIANGLE_FAN, DefaultVertexFormats.POSITION_TEX);
         wr.pos(cx, cy, 0.0D).tex((texU + 4.0F) / 64.0D, (texV + 4.0F) / 64.0D).endVertex();
@@ -782,6 +792,141 @@ public class TargetHUD extends Module {
         wr.pos(firstX, firstY, 0.0D).tex(firstU, firstV).endVertex();
         tessellator.draw();
         GlStateManager.enableCull();
+    }
+
+    private float getAuraCardWidth(float targetNameWidth, float statusTextWidth,
+                                   float healthTextWidth, float healthDiffWidth) {
+        float headW = this.head.getValue() && this.headTexture != null ? 33.0F : 0.0F;
+        float lineW = Math.max(targetNameWidth,
+                healthTextWidth + (this.indicator.getValue() ? 6.0F + healthDiffWidth : 0.0F));
+        float statusW = this.indicator.getValue() ? 16.0F : 0.0F;
+        return Math.max(120.0F, 10.0F + headW + lineW + statusW + 10.0F);
+    }
+
+    private float getAuraCardHeight() {
+        return Math.max(36.0F, this.getTextHeight() * 2.0F + 18.0F);
+    }
+
+    /**
+     * AURA mode: minimalist frosted-glass card with a rounded-corner head on
+     * the left, name + health lines and a thin health bar at the bottom.
+     */
+    private void renderAura(ScaledResolution scaledResolution,
+                            String targetNameText, String healthText, String statusText, String healthDiffText,
+                            float targetNameWidth, float healthTextWidth, float statusTextWidth, float healthDiffWidth,
+                            float healthRatio, Color targetColor, Color healthBarColor, Color healthDeltaColor,
+                            float heal, float playerHealth, float abs) {
+        final float cardWidth = this.getAuraCardWidth(targetNameWidth, statusTextWidth, healthTextWidth, healthDiffWidth);
+        final float cardHeight = this.getAuraCardHeight();
+        final float textHeight = this.getTextHeight();
+        final boolean hasHead = this.head.getValue() && this.headTexture != null;
+        final float headSize = 24.0F;
+        final float radius = 7.0F;
+        final float textX = hasHead ? 42.0F : 12.0F;
+        final float contentRight = cardWidth - (this.indicator.getValue() ? 22.0F : 12.0F);
+        final float textTop = 7.0F;
+        final float secondY = textTop + textHeight + 3.0F;
+        final float barY = cardHeight - 6.0F;
+        final float barH = 2.0F;
+
+        float posX = this.renderingFollow ? -cardWidth / 2.0F : this.offX.getValue().floatValue() / this.scale.getValue();
+        if (!this.renderingFollow) {
+            switch (this.posX.getValue()) {
+                case 1:
+                    posX += (float) scaledResolution.getScaledWidth() / this.scale.getValue() / 2.0F - cardWidth / 2.0F;
+                    break;
+                case 2:
+                    posX *= -1.0F;
+                    posX += (float) scaledResolution.getScaledWidth() / this.scale.getValue() - cardWidth;
+                    break;
+            }
+        }
+        float posY = this.renderingFollow ? -cardHeight / 2.0F : this.offY.getValue().floatValue() / this.scale.getValue();
+        if (!this.renderingFollow) {
+            switch (this.posY.getValue()) {
+                case 1:
+                    posY += (float) scaledResolution.getScaledHeight() / this.scale.getValue() / 2.0F - cardHeight / 2.0F;
+                    break;
+                case 2:
+                    posY *= -1.0F;
+                    posY += (float) scaledResolution.getScaledHeight() / this.scale.getValue() - cardHeight;
+                    break;
+            }
+        }
+
+        if (this.blur.getValue() && !this.renderingFollow) {
+            final float bx = posX;
+            final float by = posY;
+            final float bw = cardWidth;
+            final float bh = cardHeight;
+            final float sc = this.scale.getValue();
+            ShaderElement.addBlurTask(() -> {
+                GlStateManager.pushMatrix();
+                GlStateManager.scale(sc, sc, 1.0F);
+                GlStateManager.translate(bx, by, -450.0F);
+                RenderUtil.drawRoundedRectWithGl(0.0F, 0.0F, bw, bh, 7.0F, -1);
+                GlStateManager.popMatrix();
+            });
+        }
+
+        GlStateManager.pushMatrix();
+        if (!this.renderingFollow) {
+            GlStateManager.scale(this.scale.getValue(), this.scale.getValue(), 1.0F);
+        }
+        GlStateManager.translate(posX, posY, this.renderingFollow ? 0.0F : -450.0F);
+
+        // Flat, solid modern card with a soft offset shadow. No glass layers.
+        int shadowColor = new Color(0, 0, 0, 55).getRGB();
+        int cardAlpha = Math.max(215, Math.min(245, this.getBackgroundAlpha() + 60));
+        int cardColor = new Color(20, 22, 27, cardAlpha).getRGB();
+        RenderUtil.drawRoundedRectWithGl(0.0F, 2.0F, cardWidth, cardHeight + 2.0F, radius, shadowColor);
+        RenderUtil.drawRoundedRectWithGl(0.0F, 0.0F, cardWidth, cardHeight, radius, cardColor);
+
+        // Health as a slim underline along the bottom: faint track, solid fill.
+        int trackColor = new Color(255, 255, 255, 14).getRGB();
+        int fillColor = new Color(healthBarColor.getRed(), healthBarColor.getGreen(), healthBarColor.getBlue(), 255).getRGB();
+        float filledWidth = Math.max(2.0F, (cardWidth - 20.0F) * healthRatio);
+        RenderUtil.drawRoundedRectWithGl(10.0F, cardHeight - 4.5F, cardWidth - 10.0F, cardHeight - 2.5F, 1.0F, trackColor);
+        RenderUtil.drawRoundedRectWithGl(10.0F, cardHeight - 4.5F, 10.0F + filledWidth, cardHeight - 2.5F, 1.0F, fillColor);
+
+        GlStateManager.disableDepth();
+        GlStateManager.enableBlend();
+        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+
+        this.drawText(targetNameText, textX, textTop, -1);
+        this.drawText(healthText, textX, secondY, -1);
+        if (this.indicator.getValue()) {
+            this.drawText(healthDiffText, textX + healthTextWidth + 6.0F, secondY, ColorUtil.darker(healthDeltaColor, 0.85F).getRGB());
+            // W/L/D shown as a small status dot beside the name line.
+            float dotX = cardWidth - 14.0F;
+            float dotY = textTop + textHeight / 2.0F;
+            RenderUtil.fillCircle(dotX, dotY, 2.5D, 20,
+                    new Color(healthDeltaColor.getRed(), healthDeltaColor.getGreen(), healthDeltaColor.getBlue(), 255).getRGB());
+            GlStateManager.enableBlend();
+            GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        }
+
+        // Rounded-corner head, no backing plate.
+        if (hasHead) {
+            float headX = 10.0F;
+            float headY = (cardHeight - headSize) / 2.0F;
+            RenderUtil.drawRoundedRectWithGl(headX, headY, headX + headSize, headY + headSize, 6.0F,
+                    new Color(16, 18, 23, 220).getRGB());
+            // drawRoundedRectWithGl re-enables depth and disables blend; restore
+            // the state the head texture was originally rendered with.
+            GlStateManager.disableDepth();
+            GlStateManager.enableBlend();
+            GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+            mc.getTextureManager().bindTexture(this.headTexture);
+            drawRoundedHead(headX, headY, headSize, 6.0F, 8.0F, 8.0F);
+            drawRoundedHead(headX, headY, headSize, 6.0F, 40.0F, 8.0F);
+            GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+        }
+
+        GlStateManager.enableDepth();
+        GlStateManager.disableBlend();
+        GlStateManager.popMatrix();
     }
 
     private float getInkCardWidth(float targetNameWidth, float statusTextWidth,

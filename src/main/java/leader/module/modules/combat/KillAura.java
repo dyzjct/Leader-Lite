@@ -117,7 +117,6 @@ public class KillAura extends Module {
     private boolean postBlock = false;
     private boolean postSwap = false;
     private int testAttackTick = 0;
-    // Buffer 模式（KeepSprint "Buffer"）：延迟攻击包 1 tick 的状态标记。
     private boolean bufferPending = false;
 
 
@@ -172,8 +171,6 @@ public class KillAura extends Module {
 
     private boolean performAttack(float yaw, float pitch) {
         if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
-            // Buffer 模式（KeepSprint "Buffer"）：结算上一 tick 缓存的延迟攻击包。
-            // 发送前重新检测：目标仍有效、未在格挡（防砍）、仍瞄准目标，否则放弃，避免被反作弊检测。
             if (this.bufferPending) {
                 this.bufferPending = false;
                 if (this.target != null
@@ -235,16 +232,18 @@ public class KillAura extends Module {
             }
             else {
                 this.attackDelayMS = this.attackDelayMS + this.getAttackDelay();
-                if (!isBufferActive()) mc.thePlayer.swingItem();
+                if (!isBufferEnabled()) mc.thePlayer.swingItem();
                 if ((this.rotations.getValue() != 0 || !this.isBoxInAttackRange(this.target.getBox()))
                         && RotationUtil.rayTrace(this.target.getBox(), yaw, pitch, this.attackRange.getValue()) == null) {
                     return false;
                 } else {
-                    if (this.isBufferActive()) {
-                        this.bufferPending = true;
+                    if (this.isBufferEnabled()) {
                         mc.thePlayer.setSprinting(false);
                         KeyBindUtil.setKeyBindState(mc.gameSettings.keyBindSprint.getKeyCode(), false);
-                        return false;
+                        if (this.shouldDelayAttack()) {
+                            this.bufferPending = true;
+                            return false;
+                        }
                     }
                     return this.sendAttackPacket();
                 }
@@ -260,7 +259,7 @@ public class KillAura extends Module {
     }
 
     private boolean sendAttackPacket() {
-        if(isBufferActive()) mc.thePlayer.swingItem();
+        if (isBufferEnabled()) mc.thePlayer.swingItem();
         AttackEvent event = new AttackEvent(this.target.getEntity());
         EventManager.call(event);
         ((IAccessorPlayerControllerMP) mc.playerController).callSyncCurrentPlayItem();
@@ -272,9 +271,17 @@ public class KillAura extends Module {
         return true;
     }
 
-    private boolean isBufferActive() {
+    private boolean isBufferEnabled() {
         KeepSprint keepSprint = (KeepSprint) Leader.moduleManager.getModule(KeepSprint.class);
         return keepSprint != null && keepSprint.isEnabled() && keepSprint.isBufferMode();
+    }
+
+    private boolean shouldDelayAttack() {
+        KeepSprint keepSprint = (KeepSprint) Leader.moduleManager.getModule(KeepSprint.class);
+        if (keepSprint == null || !keepSprint.isEnabled() || !keepSprint.isBufferMode()) {
+            return false;
+        }
+        return !(mc.thePlayer.hurtTime > 0 && !keepSprint.onHurt.getValue());
     }
 
     private void startBlock(ItemStack itemStack) {

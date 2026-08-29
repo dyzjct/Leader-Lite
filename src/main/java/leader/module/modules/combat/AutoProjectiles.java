@@ -8,6 +8,7 @@ import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemEgg;
+import net.minecraft.item.ItemFishingRod;
 import net.minecraft.item.ItemSnowball;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.play.client.C08PacketPlayerBlockPlacement;
@@ -46,13 +47,16 @@ public class AutoProjectiles extends Module {
     public final BooleanProperty teams = new BooleanProperty("Teams", true);
     public final BooleanProperty invCheck = new BooleanProperty("Inv Check", true);
     public final BooleanProperty botCheck = new BooleanProperty("Bot Check", true);
+    public final BooleanProperty rod = new BooleanProperty("Rod", false);
+    public final IntProperty rodHoldTicks = new IntProperty("Rod Hold Ticks", 3, 1, 10, this.rod::getValue);
 
     private EntityLivingBase target = null;
     private int lastSlot = -1;
+    private int switchedSlot = -1;
     private long lastThrowTime = 0L;
     private int throwState = 0;
     private boolean hasRotated = false;
-    private SmartPredictor smartPredictor = new SmartPredictor();
+    private int rodHoldTimer = 0;
 
     public AutoProjectiles() {
         super("AutoProjectiles", false);
@@ -92,10 +96,8 @@ public class AutoProjectiles extends Module {
             }
         }
         if (targets.isEmpty()) return null;
-        targets.sort(Comparator.comparingDouble(entity -> mc.thePlayer.getDistanceToEntity(entity)));
-        EntityLivingBase newTarget = targets.get(0);
-        if (this.target != newTarget) this.smartPredictor = new SmartPredictor();
-        return newTarget;
+        targets.sort(Comparator.comparingDouble(RotationUtil::distanceToEntity));
+        return targets.get(0);
     }
 
     private int getDelay() {
@@ -124,7 +126,12 @@ public class AutoProjectiles extends Module {
     private boolean isProjectile(ItemStack stack) {
         if (stack == null) return false;
         Item item = stack.getItem();
-        return item instanceof ItemSnowball || item instanceof ItemEgg;
+        return item instanceof ItemSnowball || item instanceof ItemEgg || (this.rod.getValue() && item instanceof ItemFishingRod);
+    }
+
+    private boolean isHoldingRod() {
+        ItemStack stack = mc.thePlayer.inventory.getCurrentItem();
+        return stack != null && stack.getItem() instanceof ItemFishingRod;
     }
 
     private int getProjectileSlot() {
@@ -135,7 +142,6 @@ public class AutoProjectiles extends Module {
     }
 
     private float[] calculateSimulatedRotations(EntityLivingBase target) {
-        smartPredictor.addPosition(new Vec3(target.posX, target.posY, target.posZ), System.currentTimeMillis());
         double ping = 0;
         try {
             ping = mc.getNetHandler().getPlayerInfo(mc.thePlayer.getUniqueID()).getResponseTime();
@@ -146,7 +152,11 @@ public class AutoProjectiles extends Module {
         double totalPredictTicks = flightTicks + (ping / 50.0) + 1.0;
         Vec3 predictedPos;
         if (this.prediction.getValue()) {
-            predictedPos = smartPredictor.predictNextPosition(totalPredictTicks * 0.05);
+            predictedPos = new Vec3(
+                    target.posX + (target.posX - target.prevPosX) * totalPredictTicks,
+                    target.posY + (target.posY - target.prevPosY) * totalPredictTicks,
+                    target.posZ + (target.posZ - target.prevPosZ) * totalPredictTicks
+            );
         } else {
             predictedPos = new Vec3(target.posX, target.posY, target.posZ);
         }
@@ -197,14 +207,18 @@ public class AutoProjectiles extends Module {
         int projectileSlot = this.getProjectileSlot();
         if (projectileSlot != -1) {
             this.lastSlot = mc.thePlayer.inventory.currentItem;
+            this.switchedSlot = projectileSlot;
             mc.thePlayer.inventory.currentItem = projectileSlot;
         }
     }
 
     private void switchBack() {
         if (this.lastSlot != -1) {
-            mc.thePlayer.inventory.currentItem = this.lastSlot;
+            if (mc.thePlayer.inventory.currentItem == this.switchedSlot) {
+                mc.thePlayer.inventory.currentItem = this.lastSlot;
+            }
             this.lastSlot = -1;
+            this.switchedSlot = -1;
         }
     }
 
@@ -230,6 +244,12 @@ public class AutoProjectiles extends Module {
             this.switchBack();
             return;
         }
+        this.target = this.getTarget();
+        if (this.target == null) {
+            this.throwState = 0;
+            this.switchBack();
+            return;
+        }
         KillAura aura = (KillAura) Leader.moduleManager.modules.get(KillAura.class);
         if (aura.isEnabled() && aura.isPlayerBlocking()){
             this.target = null;
@@ -246,8 +266,6 @@ public class AutoProjectiles extends Module {
         switch (this.throwState) {
             case 0:
                 if (System.currentTimeMillis() - this.lastThrowTime < getDelay() * 50F) return;
-                this.target = this.getTarget();
-                if (this.target == null) return;
                 this.throwState = 1;
                 break;
 
@@ -273,7 +291,19 @@ public class AutoProjectiles extends Module {
             case 3:
                 this.throwProjectile();
                 this.lastThrowTime = System.currentTimeMillis();
-                this.throwState = 4;
+                if (this.rod.getValue() && this.isHoldingRod()) {
+                    this.rodHoldTimer = this.rodHoldTicks.getValue();
+                    this.throwState = 5;
+                } else {
+                    this.throwState = 4;
+                }
+                break;
+
+            case 5:
+                this.rodHoldTimer--;
+                if (this.rodHoldTimer <= 0) {
+                    this.throwState = 4;
+                }
                 break;
 
             case 4:
@@ -296,6 +326,7 @@ public class AutoProjectiles extends Module {
     public void onEnabled() {
         this.target = null;
         this.lastSlot = -1;
+        this.switchedSlot = -1;
         this.throwState = 0;
         this.hasRotated = false;
         this.lastThrowTime = 0L;
@@ -307,135 +338,5 @@ public class AutoProjectiles extends Module {
         this.target = null;
         this.throwState = 0;
         this.hasRotated = false;
-    }
-
-    private static class SmartPredictor {
-        private final Vec3[] positions = new Vec3[20];
-        private final long[] timestamps = new long[20];
-        private final double[] movementPatterns = new double[4];
-        private int index = 0;
-        private double strafeFrequency = 0.0;
-        private double jumpFrequency = 0.0;
-        private long lastDirectionChange = 0L;
-        private Vec3 lastDirection = new Vec3(0, 0, 0);
-        private boolean isStrafing = false;
-        private boolean isJumping = false;
-
-        public void addPosition(Vec3 pos, long time) {
-            positions[index] = pos;
-            timestamps[index] = time;
-            analyzeMovementPattern();
-            index = (index + 1) % positions.length;
-        }
-
-        private void analyzeMovementPattern() {
-            int currentIdx = index;
-            int prevIdx = (index - 1 + positions.length) % positions.length;
-            if (positions[currentIdx] == null || positions[prevIdx] == null) return;
-
-            Vec3 movement = new Vec3(
-                    positions[currentIdx].xCoord - positions[prevIdx].xCoord,
-                    positions[currentIdx].yCoord - positions[prevIdx].yCoord,
-                    positions[currentIdx].zCoord - positions[prevIdx].zCoord
-            );
-
-            if (Math.abs(movement.xCoord) > 0.01) {
-                if (movement.xCoord > 0) movementPatterns[0] += 0.1;
-                else movementPatterns[1] += 0.1;
-            }
-            if (Math.abs(movement.zCoord) > 0.01) {
-                if (movement.zCoord > 0) movementPatterns[2] += 0.1;
-                else movementPatterns[3] += 0.1;
-            }
-            for (int i = 0; i < 4; i++) movementPatterns[i] *= 0.95;
-
-            double len = Math.sqrt(movement.xCoord * movement.xCoord + movement.zCoord * movement.zCoord);
-            Vec3 currentDirection = len < 0.001 ? new Vec3(0, 0, 0) : new Vec3(movement.xCoord / len, 0, movement.zCoord / len);
-
-            if (lastDirection.lengthVector() > 0) {
-                double dot = lastDirection.xCoord * currentDirection.xCoord + lastDirection.zCoord * currentDirection.zCoord;
-                if (dot < 0.3) {
-                    lastDirectionChange = timestamps[currentIdx];
-                    strafeFrequency = Math.min(1.0, strafeFrequency + 0.2);
-                    isStrafing = true;
-                }
-            }
-            lastDirection = currentDirection;
-            if (movement.yCoord > 0.1) {
-                jumpFrequency = Math.min(1.0, jumpFrequency + 0.15);
-                isJumping = true;
-            } else {
-                jumpFrequency *= 0.9;
-                isJumping = false;
-            }
-            if (System.currentTimeMillis() - lastDirectionChange > 500) {
-                isStrafing = false;
-                strafeFrequency *= 0.8;
-            }
-        }
-
-        public Vec3 predictNextPosition(double predictionTime) {
-            int curIdx = (index - 1 + positions.length) % positions.length;
-            if (positions[curIdx] == null) return new Vec3(0, 0, 0);
-
-            Vec3 velocity = getCurrentVelocity();
-            Vec3 acceleration = getCurrentAcceleration();
-
-            Vec3 basePredict = new Vec3(
-                    positions[curIdx].xCoord + velocity.xCoord * predictionTime + 0.5 * acceleration.xCoord * predictionTime * predictionTime,
-                    positions[curIdx].yCoord + velocity.yCoord * predictionTime + 0.5 * acceleration.yCoord * predictionTime * predictionTime,
-                    positions[curIdx].zCoord + velocity.zCoord * predictionTime + 0.5 * acceleration.zCoord * predictionTime * predictionTime
-            );
-
-            Vec3 behaviorPredict = predictBehaviorChange(positions[curIdx], velocity, predictionTime);
-            double baseWeight = Math.max(0.3, 1.0 - strafeFrequency);
-            return new Vec3(
-                    basePredict.xCoord * baseWeight + behaviorPredict.xCoord * strafeFrequency,
-                    basePredict.yCoord * baseWeight + behaviorPredict.yCoord * strafeFrequency,
-                    basePredict.zCoord * baseWeight + behaviorPredict.zCoord * strafeFrequency
-            );
-        }
-
-        private Vec3 predictBehaviorChange(Vec3 currentPos, Vec3 velocity, double predictionTime) {
-            if (isStrafing && predictionTime > 0.3) {
-                if ((System.currentTimeMillis() - lastDirectionChange) / 1000.0 > 0.8) {
-                    return new Vec3(currentPos.xCoord - velocity.xCoord * 0.8 * (predictionTime - 0.3), currentPos.yCoord + velocity.yCoord * predictionTime, currentPos.zCoord - velocity.zCoord * 0.8 * (predictionTime - 0.3));
-                }
-            }
-            double totalPattern = movementPatterns[0] + movementPatterns[1] + movementPatterns[2] + movementPatterns[3];
-            if (totalPattern > 0) {
-                Vec3 tendency = new Vec3(velocity.xCoord + ((movementPatterns[0] - movementPatterns[1]) / totalPattern) * 0.5, velocity.yCoord + (isJumping ? jumpFrequency * 0.3 : 0), velocity.zCoord + ((movementPatterns[2] - movementPatterns[3]) / totalPattern) * 0.5);
-                return new Vec3(currentPos.xCoord + tendency.xCoord * predictionTime, currentPos.yCoord + tendency.yCoord * predictionTime, currentPos.zCoord + tendency.zCoord * predictionTime);
-            }
-            return new Vec3(currentPos.xCoord + velocity.xCoord * predictionTime, currentPos.yCoord + velocity.yCoord * predictionTime, currentPos.zCoord + velocity.zCoord * predictionTime);
-        }
-
-        public Vec3 getCurrentVelocity() {
-            int c = (index - 1 + positions.length) % positions.length;
-            int p = (index - 2 + positions.length) % positions.length;
-            if (positions[c] == null || positions[p] == null) return new Vec3(0, 0, 0);
-            long time = timestamps[c] - timestamps[p];
-            if (time <= 0) return new Vec3(0, 0, 0);
-            return new Vec3((positions[c].xCoord - positions[p].xCoord) / (time / 1000.0), (positions[c].yCoord - positions[p].yCoord) / (time / 1000.0), (positions[c].zCoord - positions[p].zCoord) / (time / 1000.0));
-        }
-
-        public Vec3 getCurrentAcceleration() {
-            int c = (index - 1 + positions.length) % positions.length;
-            int p = (index - 2 + positions.length) % positions.length;
-            int pp = (index - 3 + positions.length) % positions.length;
-            if (positions[pp] == null) return new Vec3(0, 0, 0);
-            Vec3 v1 = getVel(c, p);
-            Vec3 v2 = getVel(p, pp);
-            long time = timestamps[c] - timestamps[p];
-            if (time <= 0) return new Vec3(0, 0, 0);
-            return new Vec3((v1.xCoord - v2.xCoord) / (time / 1000.0), (v1.yCoord - v2.yCoord) / (time / 1000.0), (v1.zCoord - v2.zCoord) / (time / 1000.0));
-        }
-
-        private Vec3 getVel(int i1, int i2) {
-            if (positions[i1] == null || positions[i2] == null) return new Vec3(0, 0, 0);
-            long t = timestamps[i1] - timestamps[i2];
-            if (t <= 0) return new Vec3(0, 0, 0);
-            return new Vec3((positions[i1].xCoord - positions[i2].xCoord) / (t / 1000.0), (positions[i1].yCoord - positions[i2].yCoord) / (t / 1000.0), (positions[i1].zCoord - positions[i2].zCoord) / (t / 1000.0));
-        }
     }
 }

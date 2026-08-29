@@ -44,7 +44,13 @@ public class SmartAttack extends Module {
                 target = current;
             }
 
-            if (target != null && mc.thePlayer.getDistanceToEntity(target) > 6) target = null;
+            if (target != null && mc.thePlayer.getDistanceToEntity(target) > 6) {
+                target = null;
+                hitSelectTarget = null;
+                hitSelectWaiting = false;
+                hitSelectHurt = false;
+                hitSelectTimer = 0;
+            }
             if (target == null) {
                 shouldCancel = false;
                 return;

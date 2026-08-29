@@ -45,6 +45,7 @@ public class InvManager extends Module {
     public final IntProperty blocks = new IntProperty("Blocks", 128, 64, 2304);
     public final IntProperty throwsSlot = new IntProperty("Throws Slot", 4, 0, 9);
     public final IntProperty throwsAmount = new IntProperty("Throws Amount", 64, 16, 320);
+    public final BooleanProperty rodThrowable = new BooleanProperty("Rod Throwable", false);
     public final IntProperty gappleSlot = new IntProperty("Gapple Slot", 3, 0, 9);
     public final BooleanProperty keepOre = new BooleanProperty("Keep Ore", true);
     public final BooleanProperty keepWaterBucket = new BooleanProperty("Keep Water Bucket", true);
@@ -58,7 +59,6 @@ public class InvManager extends Module {
     private boolean spoofServerOpen = false;
     private boolean spoofNextClose = false;
     private boolean spoofOpenedThisTick = false;
-    private int legitSpoofOpenTick = -1;
 
     public InvManager() {
         super("InvManager", false);
@@ -102,7 +102,8 @@ public class InvManager extends Module {
 
     private boolean isThrowable(ItemStack stack) {
         if (stack == null) return false;
-        return stack.getItem() instanceof ItemSnowball || stack.getItem() instanceof ItemEgg;
+        return stack.getItem() instanceof ItemSnowball || stack.getItem() instanceof ItemEgg
+                || (this.rodThrowable.getValue() && stack.getItem() instanceof ItemFishingRod);
     }
 
     private boolean isGapple(ItemStack stack) {
@@ -939,7 +940,6 @@ public class InvManager extends Module {
         if (mode.getValue() == 2) {
             spoofServerOpen = false;
             spoofNextClose = false;
-            legitSpoofOpenTick = -1;
         }
     }
 

@@ -20,6 +20,7 @@ import leader.util.RayCastUtil;
 import leader.util.RotationUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.network.play.client.C02PacketUseEntity;
 import net.minecraft.network.play.client.C0APacketAnimation;
@@ -40,12 +41,13 @@ import java.util.Objects;
 
 public class Velocity extends Module {
     private static final Minecraft mc = Minecraft.getMinecraft();
-    public final ModeProperty mode = new ModeProperty("Mode", 0, new String[]{"Vanilla","Prediction"});
+    public final ModeProperty mode = new ModeProperty("Mode", 0, new String[]{"Vanilla","Prediction","GrimReduce"});
     public final BooleanProperty reduce = new BooleanProperty("Reduce", true, () -> mode.getValue() == 1);
     public final ModeProperty reduceMode = new ModeProperty("ReduceMode", 0, new String[]{"Attack", "ReleaseWhenCanAttack", "ReleaseBeforeCanAttack", "Blink"}, () -> mode.getValue() == 1 && reduce.getValue());
     public final IntProperty startBlinkHurtTime = new IntProperty("StartBlinkHurtTime", 1, 0, 10, () -> mode.getValue() == 1 && reduce.getValue() && reduceMode.getValue() == 3);
     public final IntProperty startReleaseTicks = new IntProperty("StartReleaseTicks", 1, 0, 5, () -> mode.getValue() == 1 && reduce.getValue() && reduceMode.getValue() == 3);
     public final BooleanProperty forceBlocking = new BooleanProperty("ForceBlocking", true, () -> mode.getValue() == 1 && reduce.getValue() && reduceMode.getValue() == 3);
+    public final IntProperty grimReduceTicks = new IntProperty("Grim Reduce Ticks", 4, 1, 10, () -> mode.getValue() == 2);
     private final BooleanProperty extraAttack = new BooleanProperty("ExtraAttack", false, () -> mode.getValue() == 1 && reduce.getValue() && reduceMode.getValue() != 0);
     private final BooleanProperty reduceWhenCanAttack = new BooleanProperty("Reduce When Can Attack", true, () -> mode.getValue() == 1 && reduce.getValue() && reduceMode.getValue() == 0);
     public final BooleanProperty cancelKillAuraAttack = new BooleanProperty("CancelKillAuraAttack", false, () -> mode.getValue() == 1 && reduce.getValue() && reduceMode.getValue() == 0);
@@ -56,12 +58,12 @@ public class Velocity extends Module {
     public final BooleanProperty testMode = new BooleanProperty("TestMode",false, () -> this.mode.getValue() == 1 && this.reduce.getValue() && reduceMode.getValue() == 0);
     private final IntProperty stopBlockHurtTime = new IntProperty("StopBlockHurtTime",2,0,10, () -> this.mode.getValue() == 1 && this.reduce.getValue() && reduceMode.getValue() == 0 && testMode.getValue());
 
-    public final BooleanProperty jump = new BooleanProperty("Jump", true, () -> mode.getValue() == 1);
-    public final BooleanProperty delay = new BooleanProperty("Delay", false, () -> mode.getValue() == 1);
-    public final IntProperty delayTicks = new IntProperty("Delay Ticks", 1, 1, 5, () -> mode.getValue() == 1 && delay.getValue() && !this.airBuffer.getValue());
-    public final BooleanProperty forceDelayRisingToFalling = new BooleanProperty("Force Delay Rising To Falling",false,() -> mode.getValue() == 1 && delay.getValue() && !this.airBuffer.getValue());
-    public final BooleanProperty airBuffer = new BooleanProperty("Delay Till On Ground", true, () -> mode.getValue() == 1 && delay.getValue());
-    public final BooleanProperty groundDelay = new BooleanProperty("Ground Delay", false, () -> mode.getValue() == 1 && delay.getValue() && !airBuffer.getValue());
+    public final BooleanProperty jump = new BooleanProperty("Jump", true, () -> mode.getValue() == 1 || mode.getValue() == 2);
+    public final BooleanProperty delay = new BooleanProperty("Delay", false, () -> mode.getValue() == 1 || mode.getValue() == 2);
+    public final IntProperty delayTicks = new IntProperty("Delay Ticks", 1, 1, 5, () -> (mode.getValue() == 1 || mode.getValue() == 2) && delay.getValue() && !this.airBuffer.getValue());
+    public final BooleanProperty forceDelayRisingToFalling = new BooleanProperty("Force Delay Rising To Falling",false,() -> (mode.getValue() == 1 || mode.getValue() == 2) && delay.getValue() && !this.airBuffer.getValue());
+    public final BooleanProperty airBuffer = new BooleanProperty("Delay Till On Ground", true, () -> (mode.getValue() == 1 || mode.getValue() == 2) && delay.getValue());
+    public final BooleanProperty groundDelay = new BooleanProperty("Ground Delay", false, () -> (mode.getValue() == 1 || mode.getValue() == 2) && delay.getValue() && !airBuffer.getValue());
     public final BooleanProperty rotate = new BooleanProperty("Rotate", false, () -> this.mode.getValue() == 1);
     public final IntProperty rotateTick = new IntProperty("Rotate Ticks", 3, 1, 12, () -> this.mode.getValue() == 1 && this.rotate.getValue());
     public final BooleanProperty autoMove = new BooleanProperty("Auto Move", false, () -> this.mode.getValue() == 1 && this.rotate.getValue());
@@ -79,6 +81,8 @@ public class Velocity extends Module {
     private boolean allowNext = true;
     private boolean delayFlag = false;
     private boolean jumpFlag = false;
+    private boolean grimActive = false;
+    private int grimTick = 0;
     public static boolean hasReceivedVelocity;
     private int ticksSinceVelocity = -1;
 
@@ -149,7 +153,7 @@ public class Velocity extends Module {
                     hitCount = computeReduceTicks((int) event.getX(), (int) event.getZ());
                 }
                 if (delay.getValue() && !groundDelay.getValue() && mc.thePlayer.onGround && event.getY() > 0.0){
-                    if (jump.getValue() && this.mode.getValue() == 1 && !mc.thePlayer.isBurning()){
+                    if (jump.getValue() && (this.mode.getValue() == 1 || this.mode.getValue() == 2) && !mc.thePlayer.isBurning()){
                         jumpFlag = true;
                     }
                     ticksSinceVelocity = 0;
@@ -337,6 +341,8 @@ public class Velocity extends Module {
                     }
                 }
             }
+        }
+        if (mode.getValue() == 1 || mode.getValue() == 2) {
             if (event.getType() == EventType.POST) {
                 KillAura killAura = (KillAura)Leader.moduleManager.getModule(KillAura.class);
                 if (delayFlag && (!forceDelayRisingToFalling.getValue() || mc.thePlayer.motionY <= 0.0)
@@ -344,9 +350,9 @@ public class Velocity extends Module {
                         && (isInLiquidOrWeb() || Leader.delayManager.getDelay() >= (long) delayTicks.getValue() && !airBuffer.getValue()) || (mc.thePlayer.onGround && !groundDelay.getValue() && !airBuffer.getValue()))
                         || (airBuffer.getValue() && mc.thePlayer.onGround && delayFlag)) || (reduceMode.getValue() == 1
                         && killAura.velocityCanReduce(1, killAura.blockTick)
-                        && killAura.shouldAutoBlock() && reduce.getValue()) || (reduceMode.getValue() == 2
+                        && killAura.shouldAutoBlock() && reduce.getValue() && delayFlag) || (reduceMode.getValue() == 2
                         && killAura.velocityCanReduce(2, killAura.blockTick)
-                        && killAura.shouldAutoBlock() && reduce.getValue())) {
+                        && killAura.shouldAutoBlock() && reduce.getValue() && delayFlag)) {
                     ticksSinceVelocity = 0;
                     if (killAura.getTarget() != null) {
                         if (extraAttack.getValue() && reduce.getValue() && reduceMode.getValue() != 0) {
@@ -362,9 +368,31 @@ public class Velocity extends Module {
                     dbg(Leader.clientName + "Delay/Buffer " + Leader.delayManager.getDelay() + " Ticks");
                     Leader.delayManager.setDelayState(false, DelayModules.VELOCITY);
                     delayFlag = false;
-                    if (jump.getValue() && this.mode.getValue() == 1){
+                    if (jump.getValue() && (this.mode.getValue() == 1 || this.mode.getValue() == 2)){
                         jumpFlag = true;
                     }
+                    if (this.mode.getValue() == 2) {
+                        grimActive = true;
+                        grimTick = 0;
+                    }
+                }
+            }
+        }
+        if (mode.getValue() == 2) {
+            if (event.getType() == EventType.PRE && grimActive) {
+                cancellingKillAuraAttack = true;
+                KillAura killAura = (KillAura) Leader.moduleManager.getModule(KillAura.class);
+                EntityLivingBase target = killAura != null ? killAura.getTarget() : null;
+                if (target != null && target != mc.thePlayer && mc.thePlayer.isSprinting() && killAura.isEnabled()) {
+                    EventManager.call(new AttackEvent(target));
+                    mc.getNetHandler().addToSendQueue(new C0APacketAnimation());
+                    mc.getNetHandler().addToSendQueue(new C02PacketUseEntity(target, C02PacketUseEntity.Action.ATTACK));
+                    applyHitSlowDown(false);
+                }
+                grimTick++;
+                if (grimTick >= grimReduceTicks.getValue()) {
+                    grimActive = false;
+                    cancellingKillAuraAttack = false;
                 }
             }
         }
@@ -436,7 +464,7 @@ public class Velocity extends Module {
                         }
                     }
                     LongJump longJump = (LongJump) Leader.moduleManager.modules.get(LongJump.class);
-                    if (mode.getValue() == 1
+                    if ((mode.getValue() == 1 || mode.getValue() == 2)
                             && !delayFlag
                             && !isInLiquidOrWeb()
                             && !pendingExplosion
@@ -510,6 +538,8 @@ public class Velocity extends Module {
     public void onEnabled() {
         knockback = false;
         hasReceivedVelocity = false;
+        grimActive = false;
+        grimTick = 0;
         this.rotateTickCounter = 0;
         this.targetRotation = null;
         this.knockbackX = 0;
@@ -524,6 +554,9 @@ public class Velocity extends Module {
         hasReceivedVelocity = false;
         knockback = false;
         cancellingKillAuraAttack = false;
+        grimActive = false;
+        grimTick = 0;
+        Leader.delayManager.setDelayState(false, DelayModules.VELOCITY);
         if (blinkingVelocity) {
             blinkingVelocity = false;
             blinkActive = false;

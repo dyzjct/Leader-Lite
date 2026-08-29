@@ -40,7 +40,7 @@ public class Scaffold extends Module {
             0.78125, 0.84375, 0.90625, 0.96875
     };
     public final ModeProperty mode = new ModeProperty("Mode", 1, new String[]{"Normal", "Telly", "Snap", "Legit","LegitTelly"});
-    public final ModeProperty rotationMode = new ModeProperty("Rotate Mode", 3, new String[]{"None", "Vanilla", "Backwards", "Prediction"}, () -> mode.getValue() != 3);
+    public final ModeProperty rotationMode = new ModeProperty("Rotate Mode", 3, new String[]{"None", "Vanilla", "Backwards", "Prediction", "Strict"}, () -> mode.getValue() != 3);
     public final ModeProperty moveFix = new ModeProperty("Move Fix", 1, new String[]{"None", "Silent"});
     public final IntProperty jumpDelay = new IntProperty("Jump Delay", 2, 0, 5, () -> mode.getValue() == 1 || mode.getValue() == 4);
     public final IntProperty placeDelay = new IntProperty("Place Delay", 1, 0, 5);
@@ -545,7 +545,20 @@ public class Scaffold extends Module {
                 if (this.mode.getValue() == 2 && snapForward) blockData = null;
 
                 if (blockData != null) {
-                    if (blockData != null && this.rotationMode.getValue() == 3 && !legitMode) {
+                    if (this.rotationMode.getValue() == 4 && !legitMode) {
+                        double centerX = blockData.blockPos().getX() + 0.5 + blockData.facing().getDirectionVec().getX() * 0.5;
+                        double centerY = blockData.blockPos().getY() + 0.5 + blockData.facing().getDirectionVec().getY() * 0.5;
+                        double centerZ = blockData.blockPos().getZ() + 0.5 + blockData.facing().getDirectionVec().getZ() * 0.5;
+                        float[] strictRot = RotationUtil.getRotations(centerX, centerY, centerZ);
+                        MovingObjectPosition strictMop = RotationUtil.rayTrace(strictRot[0], strictRot[1], mc.playerController.getBlockReachDistance(), 1.0F);
+                        if (strictMop != null && strictMop.typeOfHit == MovingObjectType.BLOCK
+                                && strictMop.getBlockPos().equals(blockData.blockPos()) && strictMop.sideHit == blockData.facing()) {
+                            this.yaw = strictRot[0];
+                            this.pitch = strictRot[1];
+                            this.canRotate = true;
+                            hitVec = strictMop.hitVec;
+                        }
+                    } else if (blockData != null && this.rotationMode.getValue() == 3 && !legitMode) {
                         double[] offsets = {0.1, 0.3, 0.5, 0.7, 0.9};
                         double[] x = offsets, y = offsets, z = offsets;
                         switch (blockData.facing()) {
