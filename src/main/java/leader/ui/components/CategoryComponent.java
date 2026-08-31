@@ -41,7 +41,7 @@ public class CategoryComponent {
         this.bh = 16;
         this.titleHeight = this.bh + 3;
         this.xx = 0;
-        this.categoryOpened = false;
+        this.categoryOpened = true;
         this.dragging = false;
         int tY = this.bh + 3;
         this.marginX = 80;
@@ -62,7 +62,7 @@ public class CategoryComponent {
     public boolean isOpened() { return this.categoryOpened; }
     public void setOpened(boolean on) { this.categoryOpened = on; }
 
-    public void render() {
+    public void render(float uiScale) {
         int displayH = displayHeight;
         int totalH = titleHeight + displayH + (displayH > 0 ? 4 : 0);
 
@@ -78,9 +78,17 @@ public class CategoryComponent {
         if (displayH > 0 && !modulesInCategory.isEmpty()) {
             int renderHeight = 0;
             ScaledResolution sr = new ScaledResolution(Minecraft.getMinecraft());
-            double scale = sr.getScaleFactor();
+            double framebufferScale = sr.getScaleFactor();
+            double scaledX = x * uiScale;
+            double scaledY = (y + titleHeight) * uiScale;
+            double scaledWidth = width * uiScale;
+            double scaledHeight = displayH * uiScale;
             GL11.glEnable(GL11.GL_SCISSOR_TEST);
-            GL11.glScissor((int)(x*scale), (int)((sr.getScaledHeight()-(y+titleHeight+displayH))*scale), (int)(width*scale), (int)(displayH*scale));
+            GL11.glScissor(
+                    (int) Math.floor(scaledX * framebufferScale),
+                    (int) Math.floor((sr.getScaledHeight() - scaledY - scaledHeight) * framebufferScale),
+                    (int) Math.ceil(scaledWidth * framebufferScale),
+                    (int) Math.ceil(scaledHeight * framebufferScale));
             for (Component c : modulesInCategory) {
                 int ch = c.getHeight();
                 if (renderHeight + ch > animScroll && renderHeight < animScroll + displayH) {
