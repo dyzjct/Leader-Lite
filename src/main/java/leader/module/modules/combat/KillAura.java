@@ -1118,18 +1118,19 @@ public class KillAura extends Module {
                                     if (this.hasValidTarget()) {
                                         if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
                                             int hurt = mc.thePlayer.hurtTime;
-                                            if (hurt != 0 && hurt <= startHurtTime.getValue()) {
-                                                if (!this.isPlayerBlocking()) {
-                                                    swap = true;
-                                                }
-                                                this.predictBlocking = true;
-                                            }
-                                             else if (hurt == stopHurtTime.getValue()) {
+                                            if (hurt == stopHurtTime.getValue()) {
                                                 if (this.predictBlocking) {
                                                     if (this.isPlayerBlocking()) {
                                                         this.stopBlock();
                                                     }
                                                     this.predictBlocking = false;
+                                                }
+                                            }else if (hurt != 0 && hurt <= startHurtTime.getValue()) {
+                                                if (!predictBlocking) {
+                                                    if (!this.isPlayerBlocking()) {
+                                                        swap = true;
+                                                    }
+                                                    this.predictBlocking = true;
                                                 }
                                             }
                                         }
