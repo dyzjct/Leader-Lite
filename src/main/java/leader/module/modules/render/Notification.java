@@ -13,6 +13,9 @@ import leader.util.shader.ShaderElement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.WorldRenderer;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.shader.Framebuffer;
 import org.lwjgl.opengl.GL11;
 
@@ -26,7 +29,7 @@ public class Notification extends Module {
     private static final List<NotificationEntry> entries = new ArrayList<>();
 
     public final ModeProperty mode = new ModeProperty("mode", 0, new String[]{"RIGHT", "LEFT"});
-    public final ModeProperty style = new ModeProperty("style", 1, new String[]{"CLASSIC", "MODERN", "8BIT"});
+    public final ModeProperty style = new ModeProperty("style", 1, new String[]{"CLASSIC", "MODERN", "8BIT", "AURA"});
     public final IntProperty duration = new IntProperty("duration", 1500, 500, 5000);
     public final IntProperty maxAlerts = new IntProperty("max-alerts", 5, 1, 10);
     public final FloatProperty scale = new FloatProperty("scale", 1.0F, 0.5F, 1.5F);
@@ -86,6 +89,10 @@ public class Notification extends Module {
         }
         if (this.style.getValue() == 2) {
             renderEightBit(sr, now, dur);
+            return;
+        }
+        if (this.style.getValue() == 3) {
+            renderAura(sr, now, dur);
             return;
         }
 
@@ -433,6 +440,125 @@ public class Notification extends Module {
             }
         }
         RenderUtil.disableRenderState();
+    }
+
+    /** Draws a ring segment (TRIANGLE_STRIP arc band). Angles in degrees, 0 = east, 90 = south. */
+    private void drawArcRing(float cx, float cy, float radius, float thickness, float startDeg, float sweepDeg, int color) {
+        float a = ((color >> 24) & 255) / 255.0F;
+        float r = ((color >> 16) & 255) / 255.0F;
+        float g = ((color >> 8) & 255) / 255.0F;
+        float b = (color & 255) / 255.0F;
+        GlStateManager.enableBlend();
+        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GlStateManager.disableTexture2D();
+        GlStateManager.disableCull();
+        GlStateManager.disableDepth();
+        Tessellator tessellator = Tessellator.getInstance();
+        WorldRenderer wr = tessellator.getWorldRenderer();
+        float inner = radius - thickness;
+        int segs = Math.max(8, (int) (Math.abs(sweepDeg) / 6.0F));
+        wr.begin(GL11.GL_TRIANGLE_STRIP, DefaultVertexFormats.POSITION_COLOR);
+        for (int i = 0; i <= segs; i++) {
+            double ang = Math.toRadians(startDeg + sweepDeg * i / (float) segs);
+            float cos = (float) Math.cos(ang);
+            float sin = (float) Math.sin(ang);
+            wr.pos(cx + cos * radius, cy + sin * radius, 0.0D).color(r, g, b, a).endVertex();
+            wr.pos(cx + cos * inner, cy + sin * inner, 0.0D).color(r, g, b, a).endVertex();
+        }
+        tessellator.draw();
+        GlStateManager.enableDepth();
+        GlStateManager.enableCull();
+        GlStateManager.enableTexture2D();
+        GlStateManager.disableBlend();
+    }
+
+    /**
+     * AURA style: minimal-text flat card. A glowing countdown ring on the left
+     * replaces the progress bar; the only text is the module name.
+     */
+    private void renderAura(ScaledResolution sr, long now, long dur) {
+        float textScale = this.fontScale.getValue();
+        float textHeight = FontManager.getFontHeight() * textScale;
+        float cardWidth = 120.0F;
+        float cardHeight = 30.0F;
+        float gap = 4.0F;
+        float radius = 8.0F;
+        float offX = this.offsetX.getValue() + 6.0F;
+        float offY = this.offsetY.getValue() + 8.0F;
+        boolean isRight = this.mode.getValue() == 0;
+        boolean doBlur = this.blur.getValue();
+        float invScale = 1.0F / this.scale.getValue();
+        int max = Math.min(entries.size(), this.maxAlerts.getValue());
+        float baseX = isRight ? sr.getScaledWidth() - cardWidth - offX : offX;
+        float baseY = sr.getScaledHeight() - offY - cardHeight;
+        float step = cardHeight + gap;
+
+        GlStateManager.pushMatrix();
+        GlStateManager.scale(this.scale.getValue(), this.scale.getValue(), 1.0F);
+
+        for (int i = 0; i < max; i++) {
+            NotificationEntry entry = entries.get(i);
+            float progress = Math.min((float) (now - entry.startTime) / (float) dur, 1.0F);
+            float alpha = Math.max(0.0F, Math.min(1.0F, getAlpha(now, entry.startTime, dur)));
+            int idx = max - 1 - i;
+            float slide = (1.0F - alpha) * 14.0F;
+            float x = (baseX + (isRight ? slide : -slide)) * invScale;
+            float y = (baseY - idx * step) * invScale;
+            Color themeColor = entry.enabled ? new Color(96, 224, 150) : new Color(255, 110, 116);
+
+            if (doBlur) {
+                final float bx = x;
+                final float by = y;
+                ShaderElement.addBlurTask(() -> RenderUtil.drawRoundedRectWithGl(bx, by, bx + cardWidth, by + cardHeight, radius, -1));
+            }
+
+            // Flat, solid card with a soft offset shadow. No glass layers.
+            RenderUtil.drawRoundedRectWithGl(x, y + 2.0F, x + cardWidth, y + cardHeight + 2.0F, radius,
+                    new Color(0, 0, 0, (int) (55.0F * alpha)).getRGB());
+            RenderUtil.drawRoundedRectWithGl(x, y, x + cardWidth, y + cardHeight, radius,
+                    new Color(20, 22, 27, (int) (225.0F * alpha)).getRGB());
+
+            // Countdown ring on the left (remaining time), glowing theme arc.
+            float ringCX = x + 17.0F;
+            float ringCY = y + cardHeight / 2.0F;
+            float sweep = Math.max((1.0F - progress) * 360.0F, 2.0F);
+            int trackCol = new Color(255, 255, 255, (int) (20.0F * alpha)).getRGB();
+            int glowCol = new Color(themeColor.getRed(), themeColor.getGreen(), themeColor.getBlue(), (int) (42.0F * alpha)).getRGB();
+            int arcCol = new Color(themeColor.getRed(), themeColor.getGreen(), themeColor.getBlue(), (int) (255.0F * alpha)).getRGB();
+            drawArcRing(ringCX, ringCY, 8.0F, 1.75F, 0.0F, 360.0F, trackCol);
+            drawArcRing(ringCX, ringCY, 8.0F, 3.5F, -90.0F, sweep, glowCol);
+            drawArcRing(ringCX, ringCY, 8.0F, 1.75F, -90.0F, sweep, arcCol);
+
+            // Status dot in the ring center.
+            GlStateManager.disableDepth();
+            RenderUtil.fillCircle(ringCX, ringCY, 2.5D, 20, arcCol);
+            GlStateManager.enableDepth();
+
+            GlStateManager.disableDepth();
+            GlStateManager.enableBlend();
+            GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+
+            // Module name — the only text. Trimmed to fit beside the ring.
+            String name = entry.moduleName;
+            float maxNameW = (cardWidth - 44.0F) / textScale;
+            if (FontManager.getStringWidth(name) > maxNameW) {
+                while (name.length() > 1 && FontManager.getStringWidth(name + "..") > maxNameW) {
+                    name = name.substring(0, name.length() - 1);
+                }
+                name = name + "..";
+            }
+            int nameColor = new Color(238, 242, 248, (int) (245.0F * alpha)).getRGB();
+            GlStateManager.pushMatrix();
+            GlStateManager.translate(x + 32.0F, y + (cardHeight - textHeight) / 2.0F, 0.0F);
+            GlStateManager.scale(textScale, textScale, 1.0F);
+            FontManager.drawString(name, 0.0F, 0.0F, nameColor, false);
+            GlStateManager.popMatrix();
+
+            GlStateManager.enableDepth();
+            GlStateManager.disableBlend();
+        }
+
+        GlStateManager.popMatrix();
     }
 
     private void drawStatusIcon(float x, float y, float iconSize, boolean enabled, Color themeColor, float alpha) {

@@ -16,6 +16,7 @@ import leader.property.properties.ModeProperty;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.util.AxisAlignedBB;
+import net.minecraft.util.MathHelper;
 import net.minecraft.util.MovingObjectPosition.MovingObjectType;
 import net.minecraft.util.Vec3;
 
@@ -29,6 +30,8 @@ public class AimAssist extends Module {
     public final ModeProperty rotationMode = new ModeProperty("rotation-mode", 0, new String[]{"Normal", "LockBox"});
     public final FloatProperty hSpeed = new FloatProperty("horizontal-speed", 3.0F, 0.0F, 10.0F);
     public final FloatProperty vSpeed = new FloatProperty("vertical-speed", 0.0F, 0.0F, 10.0F);
+    public final FloatProperty lockYawSpeed = new FloatProperty("lock-yaw-speed", 15.0F, 1.0F, 45.0F, () -> rotationMode.getValue() == 1);
+    public final FloatProperty lockPitchSpeed = new FloatProperty("lock-pitch-speed", 15.0F, 1.0F, 45.0F, () -> rotationMode.getValue() == 1);
     public final PercentProperty smoothing = new PercentProperty("smoothing", 50);
     public final FloatProperty range = new FloatProperty("range", 4.5F, 3.0F, 8.0F);
     public final IntProperty fov = new IntProperty("fov", 90, 30, 360);
@@ -82,15 +85,18 @@ public class AimAssist extends Module {
         if (headBox.calculateIntercept(eyePos, eyePos.addVector(lookVec.xCoord * reach, lookVec.yCoord * reach, lookVec.zCoord * reach)) != null) {
             return null;
         }
-        Vec3 probe = eyePos.addVector(lookVec.xCoord * reach, lookVec.yCoord * reach, lookVec.zCoord * reach);
-        Vec3 target = RotationUtil.getClosestPointOnBox(probe, headBox);
+        Vec3 target = RotationUtil.getClosestPointOnBox(eyePos, headBox);
         float[] desired = RotationUtil.getRotations(target.xCoord, target.yCoord, target.zCoord, eyePos.xCoord, eyePos.yCoord, eyePos.zCoord);
-        float yaw = Math.min(Math.abs(this.hSpeed.getValue()), 10.0F);
-        float pitch = Math.min(Math.abs(this.vSpeed.getValue()), 10.0F);
-        return new float[]{
-                mc.thePlayer.rotationYaw + (desired[0] - mc.thePlayer.rotationYaw) * 0.1F * yaw,
-                mc.thePlayer.rotationPitch + (desired[1] - mc.thePlayer.rotationPitch) * 0.1F * pitch
-        };
+        float yaw = this.limitAngleChange(mc.thePlayer.rotationYaw, desired[0], this.lockYawSpeed.getValue());
+        float pitch = this.limitAngleChange(mc.thePlayer.rotationPitch, desired[1], this.lockPitchSpeed.getValue());
+        return new float[]{yaw, pitch};
+    }
+
+    private float limitAngleChange(float current, float target, float speed) {
+        float diff = MathHelper.wrapAngleTo180_float(target - current);
+        if (diff > speed) diff = speed;
+        else if (diff < -speed) diff = -speed;
+        return current + diff;
     }
 
     public AimAssist() {

@@ -33,7 +33,7 @@ public class AutoWeapon extends Module {
 
     @EventTarget
     public void onPacket(PacketEvent event) {
-        if (event.getType() != EventType.SEND || isEnabled()) return;
+        if (event.getType() != EventType.SEND || !isEnabled()) return;
         if (event.getPacket() instanceof C02PacketUseEntity
                 && ((C02PacketUseEntity) event.getPacket()).getAction() == C02PacketUseEntity.Action.ATTACK
                 && this.attackEnemy) {

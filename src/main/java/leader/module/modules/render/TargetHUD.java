@@ -794,22 +794,52 @@ public class TargetHUD extends Module {
         GlStateManager.enableCull();
     }
 
+    /** Draws a ring segment (TRIANGLE_STRIP arc band). Angles in degrees, 0 = east, 90 = south. */
+    private void drawArcRing(float cx, float cy, float radius, float thickness, float startDeg, float sweepDeg, int color) {
+        float a = ((color >> 24) & 255) / 255.0F;
+        float r = ((color >> 16) & 255) / 255.0F;
+        float g = ((color >> 8) & 255) / 255.0F;
+        float b = (color & 255) / 255.0F;
+        GlStateManager.enableBlend();
+        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GlStateManager.disableTexture2D();
+        GlStateManager.disableCull();
+        GlStateManager.disableDepth();
+        Tessellator tessellator = Tessellator.getInstance();
+        WorldRenderer wr = tessellator.getWorldRenderer();
+        float inner = radius - thickness;
+        int segs = Math.max(8, (int) (Math.abs(sweepDeg) / 6.0F));
+        wr.begin(GL11.GL_TRIANGLE_STRIP, DefaultVertexFormats.POSITION_COLOR);
+        for (int i = 0; i <= segs; i++) {
+            double ang = Math.toRadians(startDeg + sweepDeg * i / (float) segs);
+            float cos = (float) Math.cos(ang);
+            float sin = (float) Math.sin(ang);
+            wr.pos(cx + cos * radius, cy + sin * radius, 0.0D).color(r, g, b, a).endVertex();
+            wr.pos(cx + cos * inner, cy + sin * inner, 0.0D).color(r, g, b, a).endVertex();
+        }
+        tessellator.draw();
+        GlStateManager.enableDepth();
+        GlStateManager.enableCull();
+        GlStateManager.enableTexture2D();
+        GlStateManager.disableBlend();
+    }
+
     private float getAuraCardWidth(float targetNameWidth, float statusTextWidth,
                                    float healthTextWidth, float healthDiffWidth) {
-        float headW = this.head.getValue() && this.headTexture != null ? 33.0F : 0.0F;
-        float lineW = Math.max(targetNameWidth,
-                healthTextWidth + (this.indicator.getValue() ? 6.0F + healthDiffWidth : 0.0F));
-        float statusW = this.indicator.getValue() ? 16.0F : 0.0F;
-        return Math.max(120.0F, 10.0F + headW + lineW + statusW + 10.0F);
+        float headW = this.head.getValue() && this.headTexture != null ? 41.0F : 0.0F;
+        float lineW = Math.max(targetNameWidth, healthTextWidth * 1.15F);
+        float statusW = this.indicator.getValue() ? 14.0F : 0.0F;
+        return Math.max(110.0F, 8.0F + headW + lineW + statusW + 10.0F);
     }
 
     private float getAuraCardHeight() {
-        return Math.max(36.0F, this.getTextHeight() * 2.0F + 18.0F);
+        return Math.max(42.0F, this.getTextHeight() * 2.0F + 22.0F);
     }
 
     /**
-     * AURA mode: minimalist frosted-glass card with a rounded-corner head on
-     * the left, name + health lines and a thin health bar at the bottom.
+     * AURA mode: minimal-text modern card. A rounded-corner head wrapped by a
+     * glowing health ring replaces the health bar; the only text is the target
+     * name and one oversized health number.
      */
     private void renderAura(ScaledResolution scaledResolution,
                             String targetNameText, String healthText, String statusText, String healthDiffText,
@@ -820,14 +850,9 @@ public class TargetHUD extends Module {
         final float cardHeight = this.getAuraCardHeight();
         final float textHeight = this.getTextHeight();
         final boolean hasHead = this.head.getValue() && this.headTexture != null;
-        final float headSize = 24.0F;
-        final float radius = 7.0F;
-        final float textX = hasHead ? 42.0F : 12.0F;
-        final float contentRight = cardWidth - (this.indicator.getValue() ? 22.0F : 12.0F);
-        final float textTop = 7.0F;
-        final float secondY = textTop + textHeight + 3.0F;
-        final float barY = cardHeight - 6.0F;
-        final float barH = 2.0F;
+        final float headSize = 26.0F;
+        final float radius = 8.0F;
+        final float textX = hasHead ? 44.0F : 12.0F;
 
         float posX = this.renderingFollow ? -cardWidth / 2.0F : this.offX.getValue().floatValue() / this.scale.getValue();
         if (!this.renderingFollow) {
@@ -882,33 +907,23 @@ public class TargetHUD extends Module {
         RenderUtil.drawRoundedRectWithGl(0.0F, 2.0F, cardWidth, cardHeight + 2.0F, radius, shadowColor);
         RenderUtil.drawRoundedRectWithGl(0.0F, 0.0F, cardWidth, cardHeight, radius, cardColor);
 
-        // Health as a slim underline along the bottom: faint track, solid fill.
-        int trackColor = new Color(255, 255, 255, 14).getRGB();
-        int fillColor = new Color(healthBarColor.getRed(), healthBarColor.getGreen(), healthBarColor.getBlue(), 255).getRGB();
-        float filledWidth = Math.max(2.0F, (cardWidth - 20.0F) * healthRatio);
-        RenderUtil.drawRoundedRectWithGl(10.0F, cardHeight - 4.5F, cardWidth - 10.0F, cardHeight - 2.5F, 1.0F, trackColor);
-        RenderUtil.drawRoundedRectWithGl(10.0F, cardHeight - 4.5F, 10.0F + filledWidth, cardHeight - 2.5F, 1.0F, fillColor);
-
-        GlStateManager.disableDepth();
-        GlStateManager.enableBlend();
-        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-
-        this.drawText(targetNameText, textX, textTop, -1);
-        this.drawText(healthText, textX, secondY, -1);
-        if (this.indicator.getValue()) {
-            this.drawText(healthDiffText, textX + healthTextWidth + 6.0F, secondY, ColorUtil.darker(healthDeltaColor, 0.85F).getRGB());
-            // W/L/D shown as a small status dot beside the name line.
-            float dotX = cardWidth - 14.0F;
-            float dotY = textTop + textHeight / 2.0F;
-            RenderUtil.fillCircle(dotX, dotY, 2.5D, 20,
-                    new Color(healthDeltaColor.getRed(), healthDeltaColor.getGreen(), healthDeltaColor.getBlue(), 255).getRGB());
-            GlStateManager.enableBlend();
-            GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        // Health ring around the head: dim track, glowing progress arc. This
+        // ring replaces the health bar entirely.
+        float ringCX = 24.0F;
+        float ringCY = cardHeight / 2.0F;
+        int trackColor = new Color(255, 255, 255, 20).getRGB();
+        int glowColor = new Color(healthBarColor.getRed(), healthBarColor.getGreen(), healthBarColor.getBlue(), 42).getRGB();
+        int arcColor = new Color(healthBarColor.getRed(), healthBarColor.getGreen(), healthBarColor.getBlue(), 255).getRGB();
+        if (hasHead) {
+            float sweep = Math.max(healthRatio * 360.0F, 2.0F);
+            drawArcRing(ringCX, ringCY, 16.0F, 2.0F, 0.0F, 360.0F, trackColor);
+            drawArcRing(ringCX, ringCY, 16.0F, 4.5F, -90.0F, sweep, glowColor);
+            drawArcRing(ringCX, ringCY, 16.0F, 2.0F, -90.0F, sweep, arcColor);
         }
 
-        // Rounded-corner head, no backing plate.
+        // Rounded-corner head inside the ring, no backing plate.
         if (hasHead) {
-            float headX = 10.0F;
+            float headX = 11.0F;
             float headY = (cardHeight - headSize) / 2.0F;
             RenderUtil.drawRoundedRectWithGl(headX, headY, headX + headSize, headY + headSize, 6.0F,
                     new Color(16, 18, 23, 220).getRGB());
@@ -922,6 +937,30 @@ public class TargetHUD extends Module {
             drawRoundedHead(headX, headY, headSize, 6.0F, 8.0F, 8.0F);
             drawRoundedHead(headX, headY, headSize, 6.0F, 40.0F, 8.0F);
             GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+        }
+
+        GlStateManager.disableDepth();
+        GlStateManager.enableBlend();
+        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+
+        // Only two pieces of text: the name and one oversized health number.
+        float nameY = (cardHeight - (textHeight + 3.5F + textHeight * 1.15F)) / 2.0F;
+        this.drawText(targetNameText, textX, nameY, -1);
+        float numScale = this.getTextScale() * 1.15F;
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(textX, nameY + textHeight + 3.5F, 0.0F);
+        GlStateManager.scale(numScale, numScale, 1.0F);
+        FontManager.drawString(healthFormat.format(heal), 0.0F, 0.0F, arcColor, this.shadow.getValue());
+        GlStateManager.popMatrix();
+
+        if (this.indicator.getValue()) {
+            // W/L/D shown as a small status dot beside the name line.
+            float dotX = cardWidth - 13.0F;
+            float dotY = nameY + textHeight / 2.0F;
+            RenderUtil.fillCircle(dotX, dotY, 2.5D, 20,
+                    new Color(healthDeltaColor.getRed(), healthDeltaColor.getGreen(), healthDeltaColor.getBlue(), 255).getRGB());
+            GlStateManager.enableBlend();
+            GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
         }
 
         GlStateManager.enableDepth();

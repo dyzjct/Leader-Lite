@@ -1,6 +1,7 @@
 package leader.mixin;
 
 import leader.management.RotationState;
+import leader.module.modules.render.BetterFPS;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.renderer.entity.RenderManager;
 import net.minecraft.entity.Entity;
@@ -27,6 +28,17 @@ public abstract class MixinRenderManager {
     private float _prevRotationPitch;
     @Unique
     private float _rotationPitch;
+
+    @Inject(
+            method = {"renderEntityStatic"},
+            at = {@At("HEAD")},
+            cancellable = true
+    )
+    private void cancelEntityRender(Entity entity, float float2, boolean boolean3, CallbackInfoReturnable<Boolean> callbackInfoReturnable) {
+        if (BetterFPS.shouldCancelEntity(entity)) {
+            callbackInfoReturnable.setReturnValue(false);
+        }
+    }
 
     @Inject(
             method = {"renderEntityStatic"},
