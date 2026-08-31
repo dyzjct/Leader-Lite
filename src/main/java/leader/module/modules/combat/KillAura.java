@@ -70,7 +70,7 @@ public class KillAura extends Module {
     private final IntProperty startBlockTick = new IntProperty("StartBlockTick",0,1,5,this::isHypixelCustom);
     private final BooleanProperty postStartBlock = new BooleanProperty("PostBlock",false,this::isHypixelCustom);
     private final IntProperty startHurtTime = new IntProperty("StartHurtTime",6,1,10,this::isPredict);
-    private final IntProperty stopHurtTime = new IntProperty("StopHurtTime",2,0,10,this::isPredict);
+    private final IntProperty holdBlockTick = new IntProperty("HoldBlockTick",2,0,6,this::isPredict);
     private final BooleanProperty alwaysRenderBlocking = new BooleanProperty("AlwaysRenderBlocking",true,this::isLag);
     private final BooleanProperty c09Instead = new BooleanProperty("C09Instead",true,this::isLag3Tick);
     private final BooleanProperty fullC09 = new BooleanProperty("FullC09(Will Cause Damage Less)",false,() -> isLag4Tick() | isLag5Tick());
@@ -121,6 +121,7 @@ public class KillAura extends Module {
     private boolean predictBlocking = false;
     private int testAttackTick = 0;
     private boolean bufferPending = false;
+    private int holdTicks = 0;
 
 
     public KillAura(){
@@ -597,6 +598,7 @@ public class KillAura extends Module {
                         this.stopBlock();
                     }
                     this.predictBlocking = false;
+                    holdTicks = 0;
                 }
                 if (swapped){
                     int handle = mc.thePlayer.inventory.currentItem;
@@ -608,6 +610,9 @@ public class KillAura extends Module {
                 this.blockTick = 0;
             }
             if (attack) {
+                if (predictBlocking){
+                    holdTicks++;
+                }
                 boolean swap = false;
                 boolean postBlink = false;
                 boolean blocked = false;
@@ -1118,20 +1123,21 @@ public class KillAura extends Module {
                                     if (this.hasValidTarget()) {
                                         if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
                                             int hurt = mc.thePlayer.hurtTime;
-                                            if (hurt == stopHurtTime.getValue()) {
-                                                if (this.predictBlocking) {
-                                                    if (this.isPlayerBlocking()) {
-                                                        this.stopBlock();
-                                                    }
-                                                    this.predictBlocking = false;
-                                                }
-                                            }else if (hurt != 0 && hurt <= startHurtTime.getValue()) {
+                                            if (hurt != 0 && hurt <= startHurtTime.getValue()) {
                                                 if (!predictBlocking) {
                                                     if (!this.isPlayerBlocking()) {
                                                         swap = true;
                                                     }
                                                     this.predictBlocking = true;
+                                                    holdTicks = 0;
                                                 }
+                                            }
+                                            if(holdTicks >= holdBlockTick.getValue() && this.predictBlocking) {
+                                                if (this.isPlayerBlocking()) {
+                                                    this.stopBlock();
+                                                }
+                                                predictBlocking = false;
+                                                holdTicks = 0;
                                             }
                                         }
                                         this.isBlocking = this.predictBlocking;
@@ -1141,6 +1147,7 @@ public class KillAura extends Module {
                                             if (this.isPlayerBlocking()) {
                                                 this.stopBlock();
                                             }
+                                            holdTicks = 0;
                                             this.predictBlocking = false;
                                         }
                                         Leader.blinkManager.setBlinkState(false, BlinkModules.AUTO_BLOCK);
