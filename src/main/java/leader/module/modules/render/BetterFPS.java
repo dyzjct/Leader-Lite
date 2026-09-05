@@ -45,6 +45,9 @@ public class BetterFPS extends Module {
                 if (entity == mc.getRenderViewEntity()) {
                     continue;
                 }
+                if (entity.isInvisible()) {
+                    continue;
+                }
                 RenderUtil.drawEntityBoundingBox(entity, 255, 255, 255, 255, 1.5F, 0.0F);
             }
             GlStateManager.resetColor();

@@ -40,7 +40,9 @@ public class Scaffold extends Module {
             0.78125, 0.84375, 0.90625, 0.96875
     };
     public final ModeProperty mode = new ModeProperty("Mode", 1, new String[]{"Normal", "Telly", "Snap", "Legit","LegitTelly"});
-    public final ModeProperty rotationMode = new ModeProperty("Rotate Mode", 3, new String[]{"None", "Vanilla", "Backwards", "Prediction", "Strict"}, () -> mode.getValue() != 3);
+    public final ModeProperty rotationMode = new ModeProperty("Rotate Mode", 3, new String[]{"None", "Vanilla", "Backwards", "Prediction", "Strict", "GodBridge"});
+    public final BooleanProperty noUpdateWhenCanPlace = new BooleanProperty("Do Not Update Rotation When Can Place", false, () -> rotationMode.getValue() == 5);
+    public final BooleanProperty edgeLimit = new BooleanProperty("Edge Limit", false, () -> rotationMode.getValue() == 5);
     public final ModeProperty moveFix = new ModeProperty("Move Fix", 1, new String[]{"None", "Silent"});
     public final IntProperty jumpDelay = new IntProperty("Jump Delay", 2, 0, 5, () -> mode.getValue() == 1 || mode.getValue() == 4);
     public final IntProperty placeDelay = new IntProperty("Place Delay", 1, 0, 5);
@@ -388,6 +390,28 @@ public class Scaffold extends Module {
         return false;
     }
 
+    private boolean isGodBridgeOnEdge() {
+        if (!mc.thePlayer.onGround) return true;
+        BlockPos below = new BlockPos(MathHelper.floor_double(mc.thePlayer.posX), MathHelper.floor_double(mc.thePlayer.posY) - 1, MathHelper.floor_double(mc.thePlayer.posZ));
+        if (BlockUtil.isReplaceable(below)) return true;
+        double xOff = mc.thePlayer.posX - MathHelper.floor_double(mc.thePlayer.posX);
+        double zOff = mc.thePlayer.posZ - MathHelper.floor_double(mc.thePlayer.posZ);
+        if (xOff < 0.15 || xOff > 0.85 || zOff < 0.15 || zOff > 0.85) {
+            int checkX = MathHelper.floor_double(mc.thePlayer.posX) + (xOff < 0.15 ? -1 : (xOff > 0.85 ? 1 : 0));
+            int checkZ = MathHelper.floor_double(mc.thePlayer.posZ) + (zOff < 0.15 ? -1 : (zOff > 0.85 ? 1 : 0));
+            if (checkX != MathHelper.floor_double(mc.thePlayer.posX) || checkZ != MathHelper.floor_double(mc.thePlayer.posZ)) {
+                BlockPos adjacentBelow = new BlockPos(checkX, MathHelper.floor_double(mc.thePlayer.posY) - 1, checkZ);
+                if (BlockUtil.isReplaceable(adjacentBelow)) return true;
+            }
+        }
+        return false;
+    }
+
+    private float quantizeDiagonal(float yaw) {
+        float diag = 45.0F + 90.0F * Math.round((yaw - 45.0F) / 90.0F);
+        return ((diag % 360.0F) + 360.0F) % 360.0F;
+    }
+
     private void updateClutch() {
         if (!this.clutch.getValue()) { if (this.clutchActive) this.clutchReset(); return; }
         if (mc.thePlayer.onGround) { if (this.clutchActive) this.clutchReset(); return; }
@@ -491,17 +515,6 @@ public class Scaffold extends Module {
                     }
                 } else { this.legitEdgeState = 0; this.legitEdgeTimer = 0; }
                 this.legitWasOnEdge = atEdge;
-                if (!mc.thePlayer.onGround) {
-                    float currentYaw = this.getCurrentYaw();
-                    float yawDiffTo180 = RotationUtil.wrapAngleDiff(currentYaw - 180.0F, event.getYaw());
-                    this.yaw = RotationUtil.quantizeAngle(yawDiffTo180);
-                    this.pitch = RotationUtil.quantizeAngle(85.0F);
-                    this.canRotate = true;
-                } else {
-                    this.yaw = this.getCurrentYaw() - 180;
-                    this.pitch = RotationUtil.quantizeAngle(85.0F);
-                    this.canRotate = true;
-                }
             }
 
             if (this.canPlace()) {
@@ -532,11 +545,12 @@ public class Scaffold extends Module {
                 float diagonalYaw = this.isDiagonal(currentYaw) ? yawDiffTo180
                         : RotationUtil.wrapAngleDiff(currentYaw - 135.0F * ((currentYaw + 180.0F) % 90.0F < 45.0F ? 1.0F : -1.0F), event.getYaw());
 
-                if (!this.canRotate && !legitMode) {
+                if (!this.canRotate) {
                     switch (this.rotationMode.getValue()) {
                         case 1: this.yaw = this.yaw == -180.0F && this.pitch == 0.0F ? RotationUtil.quantizeAngle(diagonalYaw) : RotationUtil.quantizeAngle(diagonalYaw); break;
                         case 2: if (this.yaw == -180.0F && this.pitch == 0.0F) { this.yaw = RotationUtil.quantizeAngle(yawDiffTo180); this.pitch = RotationUtil.quantizeAngle(85.0F); } else this.yaw = RotationUtil.quantizeAngle(yawDiffTo180); break;
                         case 3: if (this.yaw == -180.0F && this.pitch == 0.0F) { this.yaw = RotationUtil.quantizeAngle(diagonalYaw); this.pitch = RotationUtil.quantizeAngle(85.0F); } break;
+                        case 5: if (this.yaw == -180.0F && this.pitch == 0.0F) { this.yaw = RotationUtil.quantizeAngle(this.quantizeDiagonal(currentYaw + 180.0F)); this.pitch = RotationUtil.quantizeAngle(85.0F); } break;
                     }
                 }
 
@@ -545,7 +559,7 @@ public class Scaffold extends Module {
                 if (this.mode.getValue() == 2 && snapForward) blockData = null;
 
                 if (blockData != null) {
-                    if (this.rotationMode.getValue() == 4 && !legitMode) {
+                    if (this.rotationMode.getValue() == 4) {
                         double centerX = blockData.blockPos().getX() + 0.5 + blockData.facing().getDirectionVec().getX() * 0.5;
                         double centerY = blockData.blockPos().getY() + 0.5 + blockData.facing().getDirectionVec().getY() * 0.5;
                         double centerZ = blockData.blockPos().getZ() + 0.5 + blockData.facing().getDirectionVec().getZ() * 0.5;
@@ -558,7 +572,49 @@ public class Scaffold extends Module {
                             this.canRotate = true;
                             hitVec = strictMop.hitVec;
                         }
-                    } else if (blockData != null && this.rotationMode.getValue() == 3 && !legitMode) {
+                    } else if (this.rotationMode.getValue() == 5) {
+                        float diagYaw = this.quantizeDiagonal(this.getCurrentYaw() + 180.0F);
+                        double centerX = blockData.blockPos().getX() + 0.5 + blockData.facing().getDirectionVec().getX() * 0.5;
+                        double centerY = blockData.blockPos().getY() + 0.5 + blockData.facing().getDirectionVec().getY() * 0.5;
+                        double centerZ = blockData.blockPos().getZ() + 0.5 + blockData.facing().getDirectionVec().getZ() * 0.5;
+                        float[] centerRot = RotationUtil.getRotations(centerX, centerY, centerZ);
+                        float centerPitch = Math.max(-89.0F, Math.min(89.0F, centerRot[1]));
+                        float bestPitch = Float.NaN;
+                        double bestScore = Double.MAX_VALUE;
+                        Vec3 bestHitVec = null;
+                        for (float p = centerPitch + 30.0F; p >= centerPitch - 30.0F; p -= 0.5F) {
+                            if (p > 89.0F || p < -89.0F) continue;
+                            MovingObjectPosition mop = RotationUtil.rayTrace(diagYaw, p, mc.playerController.getBlockReachDistance(), 1.0F);
+                            if (mop != null && mop.typeOfHit == MovingObjectType.BLOCK
+                                    && mop.getBlockPos().equals(blockData.blockPos()) && mop.sideHit == blockData.facing()) {
+                                double score = Math.abs(p - centerPitch);
+                                if (score < bestScore) { bestScore = score; bestPitch = p; bestHitVec = mop.hitVec; }
+                            }
+                        }
+                        if (bestHitVec != null) {
+                            hitVec = bestHitVec;
+                            this.canRotate = true;
+                            boolean updateRotation = true;
+                            if (this.noUpdateWhenCanPlace.getValue()) {
+                                MovingObjectPosition curMop = RotationUtil.rayTrace(mc.thePlayer.rotationYaw, mc.thePlayer.rotationPitch, mc.playerController.getBlockReachDistance(), 1.0F);
+                                if (curMop != null && curMop.typeOfHit == MovingObjectType.BLOCK
+                                        && curMop.getBlockPos().equals(blockData.blockPos()) && curMop.sideHit == blockData.facing()) {
+                                    updateRotation = false;
+                                }
+                            }
+                            if (this.edgeLimit.getValue() && !this.isGodBridgeOnEdge()) {
+                                updateRotation = false;
+                            }
+                            if (updateRotation) {
+                                float yawDiff = MathHelper.wrapAngleTo180_float(diagYaw - mc.thePlayer.rotationYaw);
+                                this.yaw = Math.abs(yawDiff) <= 5.0F ? mc.thePlayer.rotationYaw : diagYaw;
+                                this.pitch = bestPitch;
+                            } else {
+                                this.yaw = mc.thePlayer.rotationYaw;
+                                this.pitch = mc.thePlayer.rotationPitch;
+                            }
+                        }
+                    } else if (this.rotationMode.getValue() == 3) {
                         double[] offsets = {0.1, 0.3, 0.5, 0.7, 0.9};
                         double[] x = offsets, y = offsets, z = offsets;
                         switch (blockData.facing()) {
@@ -628,7 +684,7 @@ public class Scaffold extends Module {
                 }
 
                 if (this.canRotate && MoveUtil.isForwardPressed() && Math.abs(MathHelper.wrapAngleTo180_float(yawDiffTo180 - this.yaw)) < 90.0F) {
-                    if (this.rotationMode.getValue() == 2 && !legitMode) this.yaw = RotationUtil.quantizeAngle(yawDiffTo180);
+                    if (this.rotationMode.getValue() == 2) this.yaw = RotationUtil.quantizeAngle(yawDiffTo180);
                 }
 
                 if (!legitMode && this.rotationMode.getValue() != 0 && this.mode.getValue() != 2) {
@@ -685,7 +741,7 @@ public class Scaffold extends Module {
                     if (Math.abs(yawDiff) > tolerance) { float clampedYaw = RotationUtil.clampAngle(yawDiff, tolerance); targetYaw = RotationUtil.quantizeAngle(event.getYaw() + clampedYaw); this.rotationTick = Math.max(this.rotationTick, 1); }
                     event.setRotation(targetYaw, targetPitch, 3);
                     if (this.moveFix.getValue() == 1) event.setPervRotation(targetYaw, 3);
-                } else if (legitMode && this.canRotate) {
+                } else if (legitMode && this.rotationMode.getValue() != 0 && this.canRotate) {
                     float targetYaw = this.yaw, targetPitch = this.pitch;
                     float yawDiff = MathHelper.wrapAngleTo180_float(targetYaw - event.getYaw());
                     float tolerance = this.legitModeSpeed.getValue();

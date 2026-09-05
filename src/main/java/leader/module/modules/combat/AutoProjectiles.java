@@ -147,30 +147,31 @@ public class AutoProjectiles extends Module {
             ping = mc.getNetHandler().getPlayerInfo(mc.thePlayer.getUniqueID()).getResponseTime();
         } catch (Exception ignored) {
         }
-        double distance = mc.thePlayer.getDistanceToEntity(target);
-        double flightTicks = distance / 1.5;
+        double diffX = target.posX - mc.thePlayer.posX;
+        double diffZ = target.posZ - mc.thePlayer.posZ;
+        double horizontalDist = Math.sqrt(diffX * diffX + diffZ * diffZ);
+        double flightTicks = horizontalDist / 1.5;
         double totalPredictTicks = flightTicks + (ping / 50.0) + 1.0;
         Vec3 predictedPos;
         if (this.prediction.getValue()) {
-            predictedPos = new Vec3(
-                    target.posX + (target.posX - target.prevPosX) * totalPredictTicks,
-                    target.posY + (target.posY - target.prevPosY) * totalPredictTicks,
-                    target.posZ + (target.posZ - target.prevPosZ) * totalPredictTicks
-            );
+            double predictedX = target.posX + (target.posX - target.prevPosX) * totalPredictTicks;
+            double predictedZ = target.posZ + (target.posZ - target.prevPosZ) * totalPredictTicks;
+            double predictedY = target.posY + (target.posY - target.prevPosY) * Math.min(totalPredictTicks, 2.0);
+            predictedPos = new Vec3(predictedX, predictedY, predictedZ);
         } else {
             predictedPos = new Vec3(target.posX, target.posY, target.posZ);
         }
-        double diffX = predictedPos.xCoord - mc.thePlayer.posX;
-        double diffZ = predictedPos.zCoord - mc.thePlayer.posZ;
-        double diffY = (predictedPos.yCoord + target.getEyeHeight() * 0.7) - (mc.thePlayer.posY + mc.thePlayer.getEyeHeight());
-        float yaw = (float) (Math.atan2(diffZ, diffX) * 180.0 / Math.PI) - 90.0F;
-        double horizontalDist = Math.sqrt(diffX * diffX + diffZ * diffZ);
+        double pDiffX = predictedPos.xCoord - mc.thePlayer.posX;
+        double pDiffZ = predictedPos.zCoord - mc.thePlayer.posZ;
+        double pDiffY = (predictedPos.yCoord + target.getEyeHeight() * 0.7) - (mc.thePlayer.posY + mc.thePlayer.getEyeHeight());
+        float yaw = (float) (Math.atan2(pDiffZ, pDiffX) * 180.0 / Math.PI) - 90.0F;
+        double pHorizontalDist = Math.sqrt(pDiffX * pDiffX + pDiffZ * pDiffZ);
         float bestPitch = 0;
         double minDiff = Double.MAX_VALUE;
         boolean found = false;
         for (float pitch = -90; pitch < 90; pitch += 0.5F) {
-            double simulatedY = simulateProjectile(horizontalDist, pitch);
-            double currentDiff = Math.abs(simulatedY - diffY);
+            double simulatedY = simulateProjectile(pHorizontalDist, pitch);
+            double currentDiff = Math.abs(simulatedY - pDiffY);
             if (currentDiff < minDiff) {
                 minDiff = currentDiff;
                 bestPitch = pitch;
