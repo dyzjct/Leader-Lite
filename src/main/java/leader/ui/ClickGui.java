@@ -21,6 +21,10 @@ import java.io.IOException;
 import java.util.*;
 import java.util.List;
 public class ClickGui extends GuiScreen {
+    private static final int CONFIG_VERSION = 2;
+    private static final int PANEL_WIDTH = 132;
+    private static final int PANEL_GAP = 6;
+    private static final int SCREEN_PADDING = 5;
     private static ClickGui instance;
     private final File configFile = new File("./config/Leader/", "clickgui.txt");
     private final ArrayList<CategoryComponent> categoryList;
@@ -63,12 +67,14 @@ public class ClickGui extends GuiScreen {
         Comparator<Module> comparator = Comparator.comparing(m -> m.getName().toLowerCase());
         categoryMap.values().forEach(list -> list.sort(comparator));
         this.categoryList = new ArrayList<>();
-        int topOffset = 5;
+        int topOffset = 28;
+        int column = 5;
         for (Map.Entry<String, List<Module>> entry : categoryMap.entrySet()) {
             CategoryComponent cat = new CategoryComponent(entry.getKey(), entry.getValue());
+            cat.setX(column);
             cat.setY(topOffset);
             categoryList.add(cat);
-            topOffset += 20;
+            column += cat.getWidth() + 6;
         }
         loadPositions();
     }
@@ -79,6 +85,12 @@ public class ClickGui extends GuiScreen {
     public static void setInstance(ClickGui screen) {
         instance = screen;
     }
+    private float getUiScale() {
+        int contentWidth = categoryList.size() * PANEL_WIDTH
+                + Math.max(0, categoryList.size() - 1) * PANEL_GAP
+                + SCREEN_PADDING * 2;
+        return Math.max(0.45F, Math.min(1.0F, this.width / (float) contentWidth));
+    }
     @Override
     public void initGui() {
         super.initGui();
@@ -86,12 +98,16 @@ public class ClickGui extends GuiScreen {
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         drawGradientBackground();
-        int fontHeight = mc.fontRendererObj.FONT_HEIGHT;
-        mc.fontRendererObj.drawString("Leader " + Leader.version, 6, this.height - 8 - fontHeight * 2, new Color(185, 195, 210).getRGB(), false);
-        mc.fontRendererObj.drawString("Leader Lite", 6, this.height - 5 - fontHeight, new Color(120, 165, 235).getRGB(), false);
+        float uiScale = getUiScale();
+        GlStateManager.pushMatrix();
+        GlStateManager.scale(uiScale, uiScale, 1.0F);
+        mouseX = (int)(mouseX / uiScale);
+        mouseY = (int)(mouseY / uiScale);
+        mc.fontRendererObj.drawString("Leader Lite  |  Click GUI", 8, 8, new Color(235, 238, 245).getRGB(), false);
+        mc.fontRendererObj.drawString("Right click a module for settings", 8, 20, new Color(145, 155, 175).getRGB(), false);
         for (CategoryComponent category : categoryList) {
             category.layoutModules();
-            category.render();
+            category.render(uiScale);
             category.handleDrag(mouseX, mouseY);
             for (Component module : category.getModules()) {
                 module.update(mouseX, mouseY);
@@ -105,6 +121,7 @@ public class ClickGui extends GuiScreen {
                 category.onScroll(mouseX, mouseY, scrollDir);
             }
         }
+        GlStateManager.popMatrix();
     }
     private void drawGradientBackground() {
         ScaledResolution sr = new ScaledResolution(mc);
@@ -128,6 +145,9 @@ public class ClickGui extends GuiScreen {
     }
     @Override
     public void mouseClicked(int x, int y, int mouseButton) {
+        float scale = getUiScale();
+        x = (int) (x / scale);
+        y = (int) (y / scale);
         for (CategoryComponent category : categoryList) {
             if (category.insideArea(x, y) && !category.isHovered(x, y) && !category.mousePressed(x, y) && mouseButton == 0) {
                 category.mousePressed(true);
@@ -153,6 +173,9 @@ public class ClickGui extends GuiScreen {
     }
     @Override
     public void mouseReleased(int x, int y, int mouseButton) {
+        float scale = getUiScale();
+        x = (int) (x / scale);
+        y = (int) (y / scale);
         for (CategoryComponent category : categoryList) {
             if (mouseButton == 0) category.mousePressed(false);
             if (category.isOpened() && !category.getModules().isEmpty()) {
@@ -186,6 +209,7 @@ public class ClickGui extends GuiScreen {
     }
     private void savePositions() {
         JsonObject json = new JsonObject();
+        json.addProperty("version", CONFIG_VERSION);
         for (CategoryComponent cat : categoryList) {
             JsonObject pos = new JsonObject();
             pos.addProperty("x", cat.getX());
@@ -203,6 +227,7 @@ public class ClickGui extends GuiScreen {
         if (!configFile.exists()) return;
         try (FileReader reader = new FileReader(configFile)) {
             JsonObject json = new JsonParser().parse(reader).getAsJsonObject();
+            if (!json.has("version") || json.get("version").getAsInt() != CONFIG_VERSION) return;
             for (CategoryComponent cat : categoryList) {
                 if (json.has(cat.getName())) {
                     JsonObject pos = json.getAsJsonObject(cat.getName());
