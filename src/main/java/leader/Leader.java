@@ -8,6 +8,7 @@ import leader.module.modules.misc.*;
 import leader.module.modules.movement.*;
 import leader.module.modules.player.*;
 import leader.module.modules.render.*;
+import leader.module.modules.render.notification.Notification;
 import me.ksyz.accountmanager.AccountManager;
 import leader.command.CommandManager;
 import leader.command.commands.*;
@@ -74,6 +75,7 @@ public class Leader {
         moduleManager.modules.put(AutoClicker.class, new AutoClicker());
         moduleManager.modules.put(AutoHeal.class, new AutoHeal());
         moduleManager.modules.put(AutoTool.class, new AutoTool());
+        moduleManager.modules.put(AutoHypixel.class,new AutoHypixel());//todo testing
         moduleManager.modules.put(BetterFPS.class, new BetterFPS());
         moduleManager.modules.put(BlockHit.class,new BlockHit());
         moduleManager.modules.put(BackTrack.class,new BackTrack());

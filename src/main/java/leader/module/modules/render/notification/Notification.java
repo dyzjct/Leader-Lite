@@ -1,9 +1,11 @@
-package leader.module.modules.render;
+package leader.module.modules.render.notification;
 
 import leader.Leader;
 import leader.event.EventTarget;
 import leader.events.Render2DEvent;
 import leader.module.Module;
+import leader.module.modules.render.FontManager;
+import leader.module.modules.render.HUD;
 import leader.property.properties.BooleanProperty;
 import leader.property.properties.FloatProperty;
 import leader.property.properties.IntProperty;
@@ -48,8 +50,8 @@ public class Notification extends Module {
         super("Notification", false);
     }
 
-    public static void addNotification(String moduleName, boolean enabled) {
-        entries.add(new NotificationEntry(moduleName, enabled, System.currentTimeMillis()));
+    public static void addNotification(String text, NoticeMode noticeMode) {
+        entries.add(new NotificationEntry(text, noticeMode, System.currentTimeMillis()));
         Notification notification = (Notification) Leader.moduleManager.modules.get(Notification.class);
         if (notification != null) {
             int max = notification.maxAlerts.getValue();
@@ -124,7 +126,11 @@ public class Notification extends Module {
             int idx = max - 1 - i;
             float y = (baseY - idx * step) * invScale;
             float x = baseX * invScale;
-            Color themeColor = entry.enabled ? new Color(0x00FF00) : new Color(0xFF4444);
+            Color themeColor = switch (entry.noticeMode) {
+                case Enable ->  new Color(0x00FF00);
+                case Disable -> new Color(0xFF4444);
+                case Info -> new Color(0xFF6D19);
+            };
 
             if (doBlur) {
                 final float bx = x;
@@ -164,7 +170,7 @@ public class Notification extends Module {
             GlStateManager.pushMatrix();
             GlStateManager.translate(x + 4.0F, y + textY, 0.0F);
             GlStateManager.scale(textScale, textScale, 1.0F);
-            FontManager.drawString(entry.moduleName, 0.0F, 0.0F, nameColor, false);
+            FontManager.drawString(entry.text, 0.0F, 0.0F, nameColor, false);
             GlStateManager.popMatrix();
 
             float iconSize = 8.0F;
@@ -176,18 +182,30 @@ public class Notification extends Module {
             GL11.glLineWidth(2.0F);
             GL11.glEnable(GL11.GL_LINE_SMOOTH);
             GL11.glBegin(GL11.GL_LINES);
-            if (entry.enabled) {
-                GL11.glColor4f(themeColor.getRed() / 255f, themeColor.getGreen() / 255f, themeColor.getBlue() / 255f, alpha);
-                GL11.glVertex2f(1.0F, iconSize * 0.55F);
-                GL11.glVertex2f(iconSize * 0.45F, iconSize - 1.0F);
-                GL11.glVertex2f(iconSize * 0.45F, iconSize - 1.0F);
-                GL11.glVertex2f(iconSize - 1.0F, 1.0F);
-            } else {
-                GL11.glColor4f(themeColor.getRed() / 255f, themeColor.getGreen() / 255f, themeColor.getBlue() / 255f, alpha);
-                GL11.glVertex2f(1.0F, 1.0F);
-                GL11.glVertex2f(iconSize - 1.0F, iconSize - 1.0F);
-                GL11.glVertex2f(iconSize - 1.0F, 1.0F);
-                GL11.glVertex2f(1.0F, iconSize - 1.0F);
+            GL11.glColor4f(themeColor.getRed() / 255f, themeColor.getGreen() / 255f, themeColor.getBlue() / 255f, alpha);
+            switch (entry.noticeMode) {
+                case Enable -> {
+                    // 叹号主体
+                    GL11.glVertex2f(1.0F, iconSize * 0.55F);
+                    GL11.glVertex2f(iconSize * 0.45F, iconSize - 1.0F);
+                    // 叹号底部像素点
+                    GL11.glVertex2f(iconSize * 0.45F, iconSize - 1.0F);
+                    GL11.glVertex2f(iconSize - 1.0F, 1.0F);
+                }
+                case Disable -> {
+                    GL11.glVertex2f(1.0F, 1.0F);
+                    GL11.glVertex2f(iconSize - 1.0F, iconSize - 1.0F);
+                    GL11.glVertex2f(iconSize - 1.0F, 1.0F);
+                    GL11.glVertex2f(1.0F, iconSize - 1.0F);
+                }
+                case Info -> {
+                    float centerX = iconSize * 0.5F;
+                    GL11.glVertex2f(centerX, 1.0F);
+                    GL11.glVertex2f(centerX, iconSize * 0.62F);
+
+                    GL11.glVertex2f(centerX - 1.0F, iconSize * 0.82F);
+                    GL11.glVertex2f(centerX + 1.0F, iconSize * 0.82F);
+                }
             }
             GL11.glEnd();
             GL11.glDisable(GL11.GL_LINE_SMOOTH);
@@ -229,7 +247,11 @@ public class Notification extends Module {
             float slide = (1.0F - alpha) * 18.0F;
             float x = (baseX + (isRight ? slide : -slide)) * invScale;
             float y = (baseY - idx * step) * invScale;
-            Color themeColor = entry.enabled ? new Color(96, 224, 150) : new Color(255, 110, 116);
+            Color themeColor = switch (entry.noticeMode) {
+                case Enable ->  new Color(96, 224, 150);
+                case Disable -> new Color(255, 110, 11);
+                case Info -> new Color(255, 243, 122);
+            };
 
             if (doBlur) {
                 final float bx = x;
@@ -258,15 +280,19 @@ public class Notification extends Module {
 
             int nameColor = new Color(245, 247, 252, (int) (245.0F * alpha)).getRGB();
             int stateColor = new Color(themeColor.getRed(), themeColor.getGreen(), themeColor.getBlue(), (int) (245.0F * alpha)).getRGB();
-            String stateText = entry.enabled ? "ON" : "OFF";
+            String stateText = switch (entry.noticeMode) {
+                case Enable -> "ON";
+                case Disable -> "OFF";
+                case Info -> "WARNING";
+            };
             GlStateManager.pushMatrix();
             GlStateManager.translate(x + 10.0F, y + 5.0F, 0.0F);
             GlStateManager.scale(textScale, textScale, 1.0F);
-            FontManager.drawString(entry.moduleName, 0.0F, 0.0F, nameColor, false);
+            FontManager.drawString(entry.text, 0.0F, 0.0F, nameColor, false);
             FontManager.drawString(stateText, 0.0F, FontManager.getFontHeight() + 2.0F, stateColor, false);
             GlStateManager.popMatrix();
 
-            drawStatusIcon(x + cardWidth - 20.0F, y + 10.0F, 8.0F, entry.enabled, themeColor, alpha);
+            drawStatusIcon(x + cardWidth - 20.0F, y + 10.0F, 8.0F, entry.noticeMode, themeColor, alpha);
 
             GlStateManager.enableDepth();
             GlStateManager.disableBlend();
@@ -292,6 +318,16 @@ public class Notification extends Module {
             "..X.X..",
             ".X...X.",
             "X.....X"
+    };
+
+    private static final String[] PIXEL_EXCLAMATION = {
+            "..XXX..",
+            "..XXX..",
+            "..XXX..",
+            "..XXX..",
+            ".......",
+            "..XXX..",
+            "..XXX.."
     };
 
     private void renderEightBit(ScaledResolution sr, long now, long dur) {
@@ -327,7 +363,12 @@ public class Notification extends Module {
             slide = Math.round(slide);
             float x = (baseX + (isRight ? slide : -slide)) * invScale;
             float y = (baseY - idx * step) * invScale;
-            Color themeColor = entry.enabled ? new Color(61, 255, 110) : new Color(255, 61, 92);
+            Color themeColor = switch (entry.noticeMode) {
+                case Enable ->  new Color(61, 255, 110);
+                case Disable -> new Color(255, 61, 92);
+                case Info -> new Color(255, 250, 0);
+            };
+
             int themeR = themeColor.getRed();
             int themeG = themeColor.getGreen();
             int themeB = themeColor.getBlue();
@@ -404,7 +445,7 @@ public class Notification extends Module {
             if (showIcon) {
                 boolean visible = !blink || (now / 350L) % 2L == 0L;
                 if (visible) {
-                    drawPixelIcon(x + 8.0F, y + (cardHeight - 14.0F) / 2.0F - 1.0F, 2.0F, entry.enabled, themeColor, alpha);
+                    drawPixelIcon(x + 8.0F, y + (cardHeight - 14.0F) / 2.0F - 1.0F, 2.0F, entry.noticeMode, themeColor, alpha);
                 }
                 textX = x + 26.0F;
             }
@@ -414,7 +455,7 @@ public class Notification extends Module {
             GlStateManager.pushMatrix();
             GlStateManager.translate(textX, textY, 0.0F);
             GlStateManager.scale(textScale, textScale, 1.0F);
-            FontManager.drawString(entry.moduleName.toUpperCase(), 0.0F, 0.0F, nameColor, true);
+            FontManager.drawString(entry.text.toUpperCase(), 0.0F, 0.0F, nameColor, true);
             GlStateManager.popMatrix();
 
             GlStateManager.enableDepth();
@@ -424,8 +465,13 @@ public class Notification extends Module {
         GlStateManager.popMatrix();
     }
 
-    private void drawPixelIcon(float x, float y, float pixel, boolean enabled, Color themeColor, float alpha) {
-        String[] pattern = enabled ? PIXEL_CHECK : PIXEL_CROSS;
+    private void drawPixelIcon(float x, float y, float pixel, NoticeMode mode, Color themeColor, float alpha) {
+        String[] pattern = switch (mode) {
+            case Enable -> PIXEL_CHECK;
+            case Disable -> PIXEL_CROSS;
+            case Info -> PIXEL_EXCLAMATION;
+        };
+
         int color = new Color(themeColor.getRed(), themeColor.getGreen(), themeColor.getBlue(), (int) (255.0F * alpha)).getRGB();
         int shadowColor = new Color(0, 0, 0, (int) (140.0F * alpha)).getRGB();
         RenderUtil.enableRenderState();
@@ -504,8 +550,11 @@ public class Notification extends Module {
             float slide = (1.0F - alpha) * 14.0F;
             float x = (baseX + (isRight ? slide : -slide)) * invScale;
             float y = (baseY - idx * step) * invScale;
-            Color themeColor = entry.enabled ? new Color(96, 224, 150) : new Color(255, 110, 116);
-
+            Color themeColor = switch (entry.noticeMode) {
+                    case Enable -> new Color(96, 224, 150);
+                    case Disable -> new Color(255, 110, 116);
+                    case Info -> new Color(255, 245, 70);
+            };
             if (doBlur) {
                 final float bx = x;
                 final float by = y;
@@ -539,7 +588,7 @@ public class Notification extends Module {
             GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
             // Module name — the only text. Trimmed to fit beside the ring.
-            String name = entry.moduleName;
+            String name = entry.text;
             float maxNameW = (cardWidth - 44.0F) / textScale;
             if (FontManager.getStringWidth(name) > maxNameW) {
                 while (name.length() > 1 && FontManager.getStringWidth(name + "..") > maxNameW) {
@@ -561,7 +610,7 @@ public class Notification extends Module {
         GlStateManager.popMatrix();
     }
 
-    private void drawStatusIcon(float x, float y, float iconSize, boolean enabled, Color themeColor, float alpha) {
+    private void drawStatusIcon(float x, float y, float iconSize, NoticeMode noticeMode, Color themeColor, float alpha) {
         GlStateManager.pushMatrix();
         GlStateManager.translate(x, y, 0.0F);
         GlStateManager.disableTexture2D();
@@ -569,16 +618,53 @@ public class Notification extends Module {
         GL11.glEnable(GL11.GL_LINE_SMOOTH);
         GL11.glColor4f(themeColor.getRed() / 255f, themeColor.getGreen() / 255f, themeColor.getBlue() / 255f, alpha);
         GL11.glBegin(GL11.GL_LINES);
-        if (enabled) {
-            GL11.glVertex2f(1.0F, iconSize * 0.55F);
-            GL11.glVertex2f(iconSize * 0.42F, iconSize - 1.0F);
-            GL11.glVertex2f(iconSize * 0.42F, iconSize - 1.0F);
-            GL11.glVertex2f(iconSize - 1.0F, 1.0F);
-        } else {
-            GL11.glVertex2f(1.0F, 1.0F);
-            GL11.glVertex2f(iconSize - 1.0F, iconSize - 1.0F);
-            GL11.glVertex2f(iconSize - 1.0F, 1.0F);
-            GL11.glVertex2f(1.0F, iconSize - 1.0F);
+
+        switch (noticeMode) {
+            case Enable -> {
+                GL11.glVertex2f(1.0F, iconSize * 0.55F);
+                GL11.glVertex2f(iconSize * 0.42F, iconSize - 1.0F);
+
+                GL11.glVertex2f(iconSize * 0.42F, iconSize - 1.0F);
+                GL11.glVertex2f(iconSize - 1.0F, 1.0F);
+            }
+
+            case Disable -> {
+                GL11.glVertex2f(1.0F, 1.0F);
+                GL11.glVertex2f(iconSize - 1.0F, iconSize - 1.0F);
+
+                GL11.glVertex2f(iconSize - 1.0F, 1.0F);
+                GL11.glVertex2f(1.0F, iconSize - 1.0F);
+            }
+
+            case Info -> {
+                float center = iconSize * 0.5F;
+                float radius = (iconSize - 2.0F) * 0.5F;
+                int segments = 16;
+
+                // 圆圈
+                for (int i = 0; i < segments; i++) {
+                    double angle1 = Math.PI * 2.0D * i / segments;
+                    double angle2 = Math.PI * 2.0D * (i + 1) / segments;
+
+                    GL11.glVertex2f(
+                            center + (float) Math.cos(angle1) * radius,
+                            center + (float) Math.sin(angle1) * radius
+                    );
+
+                    GL11.glVertex2f(
+                            center + (float) Math.cos(angle2) * radius,
+                            center + (float) Math.sin(angle2) * radius
+                    );
+                }
+
+                // 叹号竖线
+                GL11.glVertex2f(center, iconSize * 0.68F);
+                GL11.glVertex2f(center, iconSize * 0.36F);
+
+                // 叹号底部
+                GL11.glVertex2f(center - 1.0F, iconSize * 0.18F);
+                GL11.glVertex2f(center + 1.0F, iconSize * 0.18F);
+            }
         }
         GL11.glEnd();
         GL11.glDisable(GL11.GL_LINE_SMOOTH);
@@ -605,14 +691,15 @@ public class Notification extends Module {
     }
 
     private static class NotificationEntry {
-        final String moduleName;
-        final boolean enabled;
+        final String text;
+        final NoticeMode noticeMode;
         final long startTime;
 
-        NotificationEntry(String moduleName, boolean enabled, long startTime) {
-            this.moduleName = moduleName;
-            this.enabled = enabled;
+        NotificationEntry(String text, NoticeMode mode, long startTime) {
+            this.text = text;
+            this.noticeMode = mode;
             this.startTime = startTime;
         }
     }
+
 }

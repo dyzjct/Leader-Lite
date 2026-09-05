@@ -2,7 +2,8 @@ package leader.module;
 
 import leader.Leader;
 import leader.module.modules.render.HUD;
-import leader.module.modules.render.Notification;
+import leader.module.modules.render.notification.NoticeMode;
+import leader.module.modules.render.notification.Notification;
 import leader.util.KeyBindUtil;
 
 public abstract class Module {
@@ -61,7 +62,7 @@ public abstract class Module {
         boolean enabled = !this.enabled;
         this.setEnabled(enabled);
         if (this.enabled == enabled) {
-            Notification.addNotification(this.name, enabled);
+            Notification.addNotification(this.name, enabled ? NoticeMode.Enable : NoticeMode.Disable);
             if (((HUD) Leader.moduleManager.modules.get(HUD.class)).toggleSound.getValue()) {
                 Leader.moduleManager.playSound();
             }

@@ -33,7 +33,9 @@ import java.net.UnknownHostException;
 @Mixin(targets = "net.minecraft.client.multiplayer.GuiConnecting$1")
 public class MixinGuiConnecting_1 {
 
-    @Redirect(method = "run", at = @At(value = "INVOKE", target = "Ljava/net/InetAddress;getByName(Ljava/lang/String;)Ljava/net/InetAddress;"))
+    // The anonymous Thread's run method is not present in the 1.8.9 MCP mappings.
+    // Keep this injection target literal while the mixin class itself is remapped.
+    @Redirect(method = "run", at = @At(value = "INVOKE", target = "Ljava/net/InetAddress;getByName(Ljava/lang/String;)Ljava/net/InetAddress;"), remap = false)
     public InetAddress trackServerVersion(String s) throws UnknownHostException {
         final InetAddress address = InetAddress.getByName(s);
         ProtocolVersion version = ((ExtendedServerData) Minecraft.getMinecraft().getCurrentServerData()).viaForge$getVersion();
