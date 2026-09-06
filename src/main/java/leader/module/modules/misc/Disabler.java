@@ -71,6 +71,11 @@ public class Disabler extends Module {
     }
 
     private boolean checkCompass() {
+        // Packet events can arrive while the client is still on a menu or
+        // connecting, before Minecraft has created the player/inventory.
+        if (mc.thePlayer == null || mc.thePlayer.inventory == null) {
+            return false;
+        }
         for (int i = 0; i < 9; i++) {
             ItemStack stack = mc.thePlayer.inventory.getStackInSlot(i);
             if (stack != null && stack.getUnlocalizedName().toLowerCase().contains("compass")) {
@@ -83,6 +88,7 @@ public class Disabler extends Module {
     @EventTarget
     public void onPacket(PacketEvent event) {
         if (!this.isEnabled()) return;
+        if (mc.thePlayer == null || mc.thePlayer.inventory == null) return;
         if (mode.getValue() == 0 && inventory.getValue()) {
             if (!checkCompass()) {
                 if (event.getType() == EventType.SEND) {

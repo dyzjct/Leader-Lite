@@ -5,7 +5,7 @@ import leader.event.EventManager;
 import leader.events.Render2DEvent;
 import leader.module.modules.render.HUD;
 import leader.module.modules.render.NickHider;
-import leader.module.modules.render.Notification;
+import leader.module.modules.render.notification.Notification;
 import leader.module.modules.render.Potion;
 import leader.module.modules.render.TargetHUD;
 import leader.util.shader.ShaderElement;

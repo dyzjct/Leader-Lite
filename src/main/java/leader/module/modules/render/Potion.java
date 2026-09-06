@@ -4,6 +4,7 @@ import leader.Leader;
 import leader.event.EventTarget;
 import leader.events.Render2DEvent;
 import leader.module.Module;
+import leader.module.modules.render.notification.Notification;
 import leader.property.properties.BooleanProperty;
 import leader.property.properties.FloatProperty;
 import leader.property.properties.IntProperty;
