@@ -7,6 +7,7 @@ import leader.events.PacketEvent;
 import leader.module.Module;
 import leader.module.modules.render.notification.NoticeMode;
 import leader.module.modules.render.notification.Notification;
+import leader.property.properties.IntProperty;
 import leader.util.ChatUtil;
 import net.minecraft.network.play.server.S02PacketChat;
 import net.minecraft.util.IChatComponent;
@@ -16,6 +17,8 @@ import java.util.Iterator;
 import static leader.config.Config.mc;
 
 public class AutoHypixel extends Module {
+    private final IntProperty autoPlayDelay = new IntProperty("Delay", 3, 0, 5);
+
     public AutoHypixel() {
         super("AutoHypixel", false);
     }
@@ -39,14 +42,33 @@ public class AutoHypixel extends Module {
             while (iterator.hasNext()) {
                 for (String command : iterator.next().toString().split("'")) {
                     if (command.startsWith("/play") && !command.contains(".")) {
-                        if (mc.thePlayer != null) {
-                            ChatUtil.sendMessage(command);
-                        }
-                        Notification.addNotification("AutoPlay Running...", NoticeMode.Info);
+                        join(command);
                         break;
                     }
                 }
             }
         }
+    }
+
+    private void join(String command) {
+        int delay = autoPlayDelay.getValue();
+        if (delay == 0) {
+            if (mc.thePlayer != null) {
+                ChatUtil.sendMessage(command);
+            }
+            Notification.addNotification("AutoPlay Running...", NoticeMode.Info);
+            return;
+        }
+
+        new Thread(() -> {
+            Notification.addNotification("[AutoPlay] Joining a new game in " + delay + " seconds.", NoticeMode.Info);
+            try {
+                Thread.sleep(delay * 1000L);
+            } catch (InterruptedException ignored) {
+            }
+            if (mc.thePlayer != null) {
+                ChatUtil.sendMessage(command);
+            }
+        }, "Leader-AutoHypixel").start();
     }
 }
