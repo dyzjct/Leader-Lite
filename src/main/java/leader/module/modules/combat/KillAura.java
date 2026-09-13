@@ -78,6 +78,7 @@ public class KillAura extends Module {
     private final BooleanProperty c09Instead = new BooleanProperty("C09Instead",true,this::isLag3Tick);
     private final BooleanProperty fullC09 = new BooleanProperty("FullC09(Will Cause Damage Less)",false,() -> isLag4Tick() | isLag5Tick());
     private boolean strafeFacing = false;
+    private short abClickAction = 0;
     private float strafeYaw;
     private float strafeYawOffset;
     public final BooleanProperty autoBlockRequirePress;
@@ -143,7 +144,7 @@ public class KillAura extends Module {
                 "HypixelMode", 0, new String[]{"OldHypixel", "Without NoSlow", "Custom", "Lag","Predict"}, () -> this.autoBlock.getValue() == 2
         );
         this.lagClass = new ModeProperty(
-                "LagClass", 0, new String[]{"Tick", "Combo", "Full", "Swap", "Stop"}, () -> this.autoBlock.getValue() == 2 && this.hypixelMode.getValue() == 3
+                "LagClass", 0, new String[]{"Tick", "Combo", "Full", "Swap", "Stop", "Click"}, () -> this.autoBlock.getValue() == 2 && this.hypixelMode.getValue() == 3
         );
         this.tickMode = new ModeProperty(
                 "TickMode", 1, new String[]{"2Tick", "3Tick", "4Tick", "5Tick", "6Tick"}, () -> this.isLag() && this.lagClass.getValue() == 0
@@ -540,6 +541,7 @@ public class KillAura extends Module {
             case 2: return this.fullMode.getValue() == 0 ? 6 : 7;
             case 3: return this.swapMode.getValue() == 0 ? 8 : 9;
             case 4: return 10;
+            case 5: return 13;
             default:
                 int tick = this.tickMode.getValue();
                 if (tick == 3) return 4;
@@ -576,8 +578,10 @@ public class KillAura extends Module {
                     case 2: {
                         int maxT = Math.max(1, this.maxTick.getValue() - 1);
                         switch (phase) {
+                            // OldHypixel
                             case 0:
                                 return tick == this.attackTick.getValue();
+                            // Without NoSlow
                             case 1:
                                 return tick == this.attackTick.getValue() % maxT;
                             default:
@@ -586,24 +590,36 @@ public class KillAura extends Module {
                     }
                     case 3:
                         switch (this.getEffectiveLagMode()) {
+                            // 2Tick
                             case 0:
                                 return phase == 2 ? tick == 1 : tick == 0;
+                            // 3Tick
                             case 1:
                                 return phase == 2 ? tick == 2 : phase == 1 ? tick == 0 : (tick == 0 || tick == 2);
+                            // 4Tick
                             case 2:
                                 return phase == 2 ? tick == 3 : phase == 1 ? tick == 0 : (tick == 0 || tick == 3);
+                            // 3Tick + 2Tick
                             case 3:
                                 return phase == 2 ? tick == 4 : phase == 1 ? tick == 0 : (tick == 0 || tick == 2 || tick == 4);
+                            // 5Tick
                             case 4:
                                 return phase == 2 ? tick == 4 : phase == 1 ? tick == 0 : (tick == 0 || tick == 4);
+                            // 6Tick
                             case 5:
                                 return phase == 2 ? tick == 5 : phase == 1 ? tick == 0 : (tick == 0 || tick == 5);
+                            // Swap
                             case 8:
                                 return phase == 2 ? tick == 3 : phase == 1 ? tick == 0 : (tick == 0 || tick == 3);
+                            // TestPostSwap
                             case 9:
                                 return phase == 2 ? tick == 2 : tick == 0;
+                            // 5TickStop
                             case 10:
                                 return phase == 2 ? tick == 4 : phase == 1 ? tick == 0 : (tick == 0 || tick == 4);
+                            // Click
+                            case 13:
+                                return phase == 2 ? tick == 2 : tick == 0;
                             default:
                                 return false;
                         }
@@ -633,6 +649,7 @@ public class KillAura extends Module {
             if (this.attackDelayMS > 0L) {
                 this.attackDelayMS -= 50L;
             }
+            this.strafeFacing = false;
             boolean attack = this.target != null && this.canAttack();
             boolean block = attack && this.canAutoBlock();
             if (!block) {
@@ -658,7 +675,6 @@ public class KillAura extends Module {
                 this.blockTick = 0;
             }
             if (attack) {
-                this.strafeFacing = false;
                 if (predictBlocking){
                     holdTicks++;
                 }
@@ -666,6 +682,7 @@ public class KillAura extends Module {
                 boolean blocked = false;
                 if (block) {
                     switch (this.autoBlock.getValue()) {
+                        // AutoBlock None
                         case 0:
                             if (PlayerUtil.isUsingItem()) {
                                 this.isBlocking = true;
@@ -681,6 +698,7 @@ public class KillAura extends Module {
                             Leader.blinkManager.setBlinkState(false, BlinkModules.AUTO_BLOCK);
                             this.fakeBlockState = false;
                             break;
+                        // Vanilla
                         case 1:
                             if (this.hasValidTarget()) {
                                 if (!this.isPlayerBlocking() && !Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -695,8 +713,10 @@ public class KillAura extends Module {
                                 this.fakeBlockState = false;
                             }
                             break;
+                        // Hypixel
                         case 2:
                             switch (this.hypixelMode.getValue()) {
+                                // OldHypixel
                                 case 0:
                                     if (this.hasValidTarget()) {
                                         if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -752,6 +772,7 @@ public class KillAura extends Module {
                                         Velocity.extraAttacked = false;
                                     }
                                     break;
+                                // Without NoSlow
                                 case 1:
                                     if (this.hasValidTarget()) {
                                         if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -796,6 +817,7 @@ public class KillAura extends Module {
                                         Velocity.extraAttacked = false;
                                     }
                                     break;
+                                // Custom
                                 case 2:
                                     if (this.hasValidTarget()) {
                                         if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -847,8 +869,10 @@ public class KillAura extends Module {
                                         Velocity.extraAttacked = false;
                                     }
                                     break;
+                                // Lag
                                 case 3:
                                     switch (this.getEffectiveLagMode()) {
+                                        // Tick · 2Tick
                                         case 0:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -883,6 +907,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Tick · 3Tick
                                         case 1:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -926,6 +951,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Tick · 4Tick
                                         case 2:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -976,6 +1002,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Combo · 3Tick + 2Tick
                                         case 3:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1038,6 +1065,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Tick · 5Tick
                                         case 4:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1103,6 +1131,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Tick · 6Tick
                                         case 5:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1179,6 +1208,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Full · 3TickFull
                                         case 6:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1230,6 +1260,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Full · 4TickFull
                                         case 7:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1292,6 +1323,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Swap · Swap
                                         case 8:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1346,6 +1378,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Swap · TestPostSwap
                                         case 9:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1388,6 +1421,7 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Stop · 5TickStop
                                         case 10:
                                             if (this.hasValidTarget()) {
                                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1448,10 +1482,53 @@ public class KillAura extends Module {
                                                 Velocity.extraAttacked = false;
                                             }
                                             break;
+                                        // Click
+                                        case 13:
+                                            if (this.hasValidTarget()) {
+                                                if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
+                                                    switch (this.blockTick) {
+                                                        case 0:
+                                                            Leader.blinkManager.setBlinkState(false, BlinkModules.AUTO_BLOCK);
+                                                            blocked = true;
+                                                            if (!this.isPlayerBlocking() && ItemUtil.isHoldingSword()) {
+                                                                swap = true;
+                                                            }
+                                                            this.blockTick = 1;
+                                                            break;
+                                                        case 1:
+                                                            attack = false;
+                                                            PacketUtil.sendPacket(new C0EPacketClickWindow(0, mc.thePlayer.inventory.currentItem + 36, Disabler.getAltSlot(mc.thePlayer.inventory.currentItem), 2, null, this.abClickAction++));
+                                                            PacketUtil.sendPacket(new C0EPacketClickWindow(0, Disabler.getAltSlot(mc.thePlayer.inventory.currentItem) + 36, mc.thePlayer.inventory.currentItem, 2, null, this.abClickAction++));
+                                                            this.stopBlock();
+                                                            this.blockTick = 2;
+                                                            break;
+                                                        case 2:
+                                                            attack = false;
+                                                            PacketUtil.sendPacket(new C0EPacketClickWindow(0, mc.thePlayer.inventory.currentItem + 36, Disabler.getAltSlot(mc.thePlayer.inventory.currentItem), 2, null, this.abClickAction++));
+                                                            PacketUtil.sendPacket(new C0EPacketClickWindow(0, Disabler.getAltSlot(mc.thePlayer.inventory.currentItem) + 36, mc.thePlayer.inventory.currentItem, 2, null, this.abClickAction++));
+                                                            this.stopBlock();
+                                                            if (this.attackDelayMS <= 50L) {
+                                                                this.blockTick = 0;
+                                                            }
+                                                            break;
+                                                        default:
+                                                            this.blockTick = 0;
+                                                    }
+                                                }
+                                                this.isBlocking = true;
+                                                this.fakeBlockState = alwaysRenderBlocking.getValue();
+                                            } else {
+                                                Leader.blinkManager.setBlinkState(false, BlinkModules.AUTO_BLOCK);
+                                                this.isBlocking = false;
+                                                this.fakeBlockState = false;
+                                                Velocity.extraAttacked = false;
+                                            }
+                                            break;
                                         default:
                                             break;
                                     }
                                     break;
+                                // Predict
                                 case 4:
                                     if (this.hasValidTarget()) {
                                         if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1493,6 +1570,7 @@ public class KillAura extends Module {
                                     break;
                             }
                             break;
+                        // Legit
                         case 3:
                             if (this.hasValidTarget()) {
                                 if (!Leader.playerStateManager.digging && !Leader.playerStateManager.placing) {
@@ -1526,6 +1604,7 @@ public class KillAura extends Module {
                                 Velocity.extraAttacked = false;
                             }
                             break;
+                        // Fake
                         case 4:
                             Leader.blinkManager.setBlinkState(false, BlinkModules.AUTO_BLOCK);
                             this.isBlocking = false;
@@ -1542,7 +1621,8 @@ public class KillAura extends Module {
                 boolean attacked = false;
                 if (this.isBoxInSwingRange(this.target.getBox())) {
                     boolean willAttack = attack && this.attackDelayMS <= 0L && hasValidTarget();
-                    boolean strafe = this.moveFix.getValue() == 3 && !willAttack;
+                    boolean strafe = this.moveFix.getValue() == 3 && !willAttack
+                            && this.target != null && this.isValidTarget(this.target.getEntity());
                     this.strafeFacing = strafe;
                     if (strafe) {
                         this.applyStrafeRotation(event);
@@ -1734,6 +1814,7 @@ public class KillAura extends Module {
     public void onLivingUpdate(LivingUpdateEvent event) {
         if (this.isEnabled()
                 && this.moveFix.getValue() == 3
+                && this.target != null
                 && !this.strafeFacing
                 && !mc.thePlayer.isSprinting()) {
             mc.thePlayer.movementInput.jump = false;

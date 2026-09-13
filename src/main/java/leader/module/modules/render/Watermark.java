@@ -26,7 +26,7 @@ public class Watermark extends Module {
     private int displayFps = 0;
     private int frameCount = 0;
 
-    public final ModeProperty mode = new ModeProperty("mode", 1, new String[]{"CLASSIC", "MODERN", "FROST"});
+    public final ModeProperty mode = new ModeProperty("mode", 1, new String[]{"CLASSIC", "MODERN", "FROST", "ICON"});
     public final FloatProperty scale = new FloatProperty("scale", 1.0F, 0.5F, 2.0F);
     public final FloatProperty fontScale = new FloatProperty("font-scale", 1.0F, 0.7F, 1.5F);
     public final IntProperty offX = new IntProperty("offset-x", 4, 0, 500);
@@ -99,6 +99,10 @@ public class Watermark extends Module {
         }
         if (this.mode.getValue() == 2) {
             renderFrost(curText, nextText, anim, tc, now);
+            return;
+        }
+        if (this.mode.getValue() == 3) {
+            renderIcon(tc);
             return;
         }
 
@@ -238,6 +242,129 @@ public class Watermark extends Module {
         GlStateManager.scale(textScale, textScale, 1.0F);
         FontManager.drawString(text, 0.0F, 0.0F, new Color(244, 247, 252, alpha).getRGB(), false);
         GlStateManager.popMatrix();
+    }
+
+    private void renderIcon(Color themeColor) {
+        float uiScale = this.scale.getValue();
+        float textScale = this.fontScale.getValue();
+        String name = CLIENT_NAME;
+        String fps = this.displayFps + " fps";
+        String player = mc.thePlayer != null ? mc.thePlayer.getName() : "-";
+
+        float padX = 7.0F;
+        float padY = 5.0F;
+        float barW = 2.0F;
+        float barGap = 6.0F;
+        float iconW = 9.0F;
+        float iconH = iconW * 0.86F + 3.0F;
+        float iconGap = 6.0F;
+        float sepGap = 6.0F;
+        float textH = FontManager.getFontHeight() * textScale;
+
+        float nameW = FontManager.getStringWidth(name) * textScale;
+        float fpsW = FontManager.getStringWidth(fps) * textScale;
+        float playerW = FontManager.getStringWidth(player) * textScale;
+        float sepW = FontManager.getStringWidth("|") * textScale;
+
+        float contentW = barW + barGap + iconW + iconGap + nameW + sepGap + sepW + sepGap
+                + fpsW + sepGap + sepW + sepGap + playerW;
+        float cardW = padX + contentW + padX;
+        float cardH = Math.max(padY * 2.0F + textH, padY * 2.0F + iconH);
+
+        ScaledResolution sr = new ScaledResolution(mc);
+        float maxW = sr.getScaledWidth() / uiScale;
+        float x = this.offX.getValue();
+        float y = this.offY.getValue();
+        if (x + cardW > maxW) x = maxW - cardW - 4.0F;
+        if (x < 4.0F) x = 4.0F;
+
+        GlStateManager.pushMatrix();
+        GlStateManager.scale(uiScale, uiScale, 1.0F);
+
+        RenderUtil.drawRoundedRectWithGl(x, y, x + cardW, y + cardH, 4.0F, new Color(0, 0, 0, 96).getRGB());
+        RenderUtil.drawRoundedRectWithGl(x + padX - 3.0F, y + padY - 1.0F, x + padX - 1.0F,
+                y + cardH - padY + 1.0F, 1.0F,
+                new Color(themeColor.getRed(), themeColor.getGreen(), themeColor.getBlue(), 250).getRGB());
+
+        float cursor = x + padX + barW + barGap;
+        this.drawLogo(cursor, y + (cardH - iconH) / 2.0F, iconW, themeColor);
+        cursor += iconW + iconGap;
+
+        GlStateManager.disableDepth();
+        GlStateManager.enableBlend();
+        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+
+        float textY = y + (cardH - textH) / 2.0F + 1.0F;
+        int accent = new Color(themeColor.getRed(), themeColor.getGreen(), themeColor.getBlue(), 250).getRGB();
+        int white = new Color(238, 242, 248, 246).getRGB();
+        int dim = new Color(148, 156, 170, 215).getRGB();
+
+        this.drawIconText(name, cursor, textY, textScale, accent);
+        cursor += nameW + sepGap;
+        this.drawIconText("|", cursor, textY, textScale, dim);
+        cursor += sepW + sepGap;
+        this.drawIconText(fps, cursor, textY, textScale, white);
+        cursor += fpsW + sepGap;
+        this.drawIconText("|", cursor, textY, textScale, dim);
+        cursor += sepW + sepGap;
+        this.drawIconText(player, cursor, textY, textScale, white);
+
+        GlStateManager.enableDepth();
+        GlStateManager.disableBlend();
+        GlStateManager.popMatrix();
+    }
+
+    private void drawIconText(String text, float x, float y, float scale, int color) {
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(x, y, 0.0F);
+        GlStateManager.scale(scale, scale, 1.0F);
+        FontManager.drawString(text, 0.0F, 0.0F, color, false);
+        GlStateManager.popMatrix();
+    }
+
+    private void drawLogo(float x, float y, float size, Color themeColor) {
+        float w = size;
+        float h = size * 0.86F;
+        float r = themeColor.getRed() / 255.0F;
+        float g = themeColor.getGreen() / 255.0F;
+        float b = themeColor.getBlue() / 255.0F;
+
+        GlStateManager.disableTexture2D();
+        GL11.glEnable(GL11.GL_POLYGON_SMOOTH);
+        GL11.glHint(GL11.GL_POLYGON_SMOOTH_HINT, GL11.GL_NICEST);
+
+        GL11.glColor4f(r, g, b, 0.95F);
+        GL11.glBegin(GL11.GL_TRIANGLES);
+        GL11.glVertex2f(x, y + h * 0.12F);
+        GL11.glVertex2f(x, y + h * 0.48F);
+        GL11.glVertex2f(x + w * 0.36F, y + h * 0.48F);
+
+        GL11.glVertex2f(x + w * 0.5F, y + h * 0.02F);
+        GL11.glVertex2f(x + w * 0.18F, y + h * 0.48F);
+        GL11.glVertex2f(x + w * 0.82F, y + h * 0.48F);
+
+        GL11.glVertex2f(x + w, y + h * 0.12F);
+        GL11.glVertex2f(x + w * 0.64F, y + h * 0.48F);
+        GL11.glVertex2f(x + w, y + h * 0.48F);
+        GL11.glEnd();
+
+        GL11.glBegin(GL11.GL_QUADS);
+        GL11.glVertex2f(x, y + h * 0.42F);
+        GL11.glVertex2f(x + w, y + h * 0.42F);
+        GL11.glVertex2f(x + w, y + h * 0.78F);
+        GL11.glVertex2f(x, y + h * 0.78F);
+
+        GL11.glColor4f(Math.min(1.0F, r * 0.5F + 0.5F), Math.min(1.0F, g * 0.5F + 0.5F),
+                Math.min(1.0F, b * 0.5F + 0.5F), 1.0F);
+        GL11.glVertex2f(x, y + h * 0.82F);
+        GL11.glVertex2f(x + w, y + h * 0.82F);
+        GL11.glVertex2f(x + w, y + h);
+        GL11.glVertex2f(x, y + h);
+        GL11.glEnd();
+
+        GL11.glDisable(GL11.GL_POLYGON_SMOOTH);
+        GlStateManager.enableTexture2D();
+        GlStateManager.resetColor();
     }
 
     private void renderClassic(String curText, String nextText, float anim, Color themeColor) {

@@ -116,6 +116,7 @@ public class Leader {
         moduleManager.modules.put(LightningTracker.class, new LightningTracker());
         moduleManager.modules.put(LongJump.class, new LongJump());
         moduleManager.modules.put(MCF.class, new MCF());
+        moduleManager.modules.put(EnvModifier.class, new EnvModifier());
         moduleManager.modules.put(NameTags.class, new NameTags());
         moduleManager.modules.put(Notification.class, new Notification());
         moduleManager.modules.put(Watermark.class, new Watermark());

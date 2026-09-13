@@ -1396,7 +1396,6 @@ public class TargetHUD extends Module {
         int textShadow = new Color(0, 0, 0, (int) (110.0F * fade)).getRGB();
         int trackColor = new Color(0, 0, 0, (int) (100.0F * fade)).getRGB();
         int lagColor = new Color(99, 99, 99, (int) (120.0F * fade)).getRGB();
-        Color healthFill = healthBarColor;
 
         if (glassBg) {
             RenderUtil.drawRoundedRectWithGl(0.0F, 0.0F, cardWidth, cardHeight, 5.0F,
@@ -1415,9 +1414,8 @@ public class TargetHUD extends Module {
             RenderUtil.drawRoundedRectWithGl(46.0F, barY, 46.0F + lagW, barY + 4.0F,
                     Math.min(2.0F, lagW / 2.0F), lagColor);
         }
-        Color barA = new Color(healthFill.getRed(), healthFill.getGreen(), healthFill.getBlue(),
-                (int) (255.0F * fade));
-        Color barB = ColorUtil.darker(barA, 0.67F);
+        Color barA = new Color(0, 150, 255, (int) (255.0F * fade));
+        Color barB = new Color(0, 100, 255, (int) (255.0F * fade));
         RenderUtil.drawRoundedRectGradientH(46.0F, barY, 46.0F + fillW, barY + 4.0F,
                 Math.min(2.0F, fillW / 2.0F), barA.getRGB(), barB.getRGB());
 

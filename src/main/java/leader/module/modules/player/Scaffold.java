@@ -92,6 +92,7 @@ public class Scaffold extends Module {
     private int placeDelayCounter = 0;
     private double prevBpsX, prevBpsZ;
     private float currentBps;
+    private int counterMax = 0;
     private boolean snapForward = true;
     private int snapForwardTimer = 0;
     private boolean snapLocked = false;
@@ -932,50 +933,106 @@ public class Scaffold extends Module {
 
     private void renderBlockCounter() {
         long now = System.currentTimeMillis();
-        String text = Scaffold.count + " Blocks";
+        String countText = String.valueOf(Scaffold.count);
+        if (Scaffold.count > this.counterMax) this.counterMax = Scaffold.count;
+        if (Scaffold.count <= 0) this.counterMax = 0;
+        int percent = this.counterMax > 0
+                ? (int) Math.round(Scaffold.count * 100.0D / (double) this.counterMax) : 100;
+        String bpsText = String.format("%.1f BPS", this.currentBps);
+        String remainText = percent + "% remaining";
 
         HUD hud = (HUD) Leader.moduleManager.modules.get(HUD.class);
         Color tc = hud != null ? hud.getColor(now) : new Color(0, 190, 255);
 
         float textScale = 1.0F;
-        float textW = FontManager.getStringWidth(text) * textScale;
-        float textH = FontManager.getFontHeight() * textScale;
+        float subScale = 0.72F;
+        float lineHeight = FontManager.getFontHeight() * textScale;
+        float subHeight = FontManager.getFontHeight() * subScale;
+        float icon = 30.0F;
+        float iconGap = 9.0F;
+        float padLeft = 7.0F;
+        float padRight = 11.0F;
+        float padY = 7.0F;
 
-        float padX = 10.0F;
-        float padY = 6.0F;
-        float dot = 4.0F;
-        float dotGap = 7.0F;
-        float cardW = padX + dot + dotGap + textW + padX;
-        float cardH = padY + textH + padY;
-        float radius = 8.0F;
+        float textW = Math.max(FontManager.getStringWidth("Blocks") * textScale,
+                Math.max(FontManager.getStringWidth(bpsText) * textScale,
+                        FontManager.getStringWidth(remainText) * subScale));
+        float cardW = padLeft + icon + iconGap + textW + padRight;
+        float cardH = padY * 2.0F + lineHeight * 2.0F + subHeight + 3.0F;
 
         ScaledResolution sr = new ScaledResolution(mc);
         float x = sr.getScaledWidth() / 2.0F - cardW / 2.0F;
         float y = sr.getScaledHeight() / 2.0F - cardH - 12.0F;
-        float pulse = 0.7F + 0.3F * (float) Math.sin(now * 0.004D);
-        int accent = new Color(tc.getRed(), tc.getGreen(), tc.getBlue(), 250).getRGB();
 
         GlStateManager.pushMatrix();
-        RenderUtil.drawZenGlass(x, y, x + cardW, y + cardH, radius, 1.0F);
-        RenderUtil.drawRoundedRectWithGl(x + padX - 1.0F, y + (cardH - dot) / 2.0F - 1.0F,
-                x + padX + dot + 1.0F, y + (cardH + dot) / 2.0F + 1.0F, 3.0F,
-                new Color(tc.getRed(), tc.getGreen(), tc.getBlue(), (int) (60.0F * pulse)).getRGB());
-        RenderUtil.drawRoundedRectWithGl(x + padX, y + (cardH - dot) / 2.0F, x + padX + dot, y + (cardH + dot) / 2.0F,
-                2.0F, accent);
+        RenderUtil.drawRoundedRectWithGl(x, y + 2.0F, x + cardW, y + cardH + 2.0F, 12.0F,
+                new Color(0, 0, 0, 72).getRGB());
+        RenderUtil.drawRoundedRectWithGl(x, y, x + cardW, y + cardH, 12.0F,
+                new Color(10, 11, 14, 216).getRGB());
+
+        this.drawCounterIcon(x + padLeft, y + (cardH - icon) / 2.0F, icon, tc, countText, percent);
 
         GlStateManager.disableDepth();
         GlStateManager.enableBlend();
         GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
+        float textX = x + padLeft + icon + iconGap;
+        float lineY = y + padY;
+        int white = new Color(244, 247, 252, 246).getRGB();
+        int gray = new Color(168, 174, 186, 210).getRGB();
+        int accent = new Color(tc.getRed(), tc.getGreen(), tc.getBlue(), 245).getRGB();
+
         GlStateManager.pushMatrix();
-        GlStateManager.translate(x + padX + dot + dotGap, y + (cardH - textH) / 2.0F + 1.0F, 0.0F);
+        GlStateManager.translate(textX, lineY, 0.0F);
         GlStateManager.scale(textScale, textScale, 1.0F);
-        FontManager.drawString(text, 0.0F, 0.0F, new Color(244, 247, 252, 238).getRGB(), false);
+        FontManager.drawString("Blocks", 0.0F, 0.0F, white, false);
+        GlStateManager.popMatrix();
+
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(textX, lineY + lineHeight + 1.5F, 0.0F);
+        GlStateManager.scale(textScale, textScale, 1.0F);
+        FontManager.drawString(bpsText, 0.0F, 0.0F, accent, false);
+        GlStateManager.popMatrix();
+
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(textX, lineY + lineHeight * 2.0F + 3.0F, 0.0F);
+        GlStateManager.scale(subScale, subScale, 1.0F);
+        FontManager.drawString(remainText, 0.0F, 0.0F, gray, false);
         GlStateManager.popMatrix();
 
         GlStateManager.enableDepth();
         GlStateManager.disableBlend();
         GlStateManager.popMatrix();
+    }
+
+    private void drawCounterIcon(float x, float y, float size, Color accent, String countText, int percent) {
+        float cx = x + size / 2.0F;
+        float cy = y + size / 2.0F;
+        float radius = size / 2.0F - 1.5F;
+        float thickness = 3.0F;
+        int clamped = Math.max(0, Math.min(100, percent));
+        float sweep = 360.0F * clamped / 100.0F;
+
+        int track = new Color(255, 255, 255, 38).getRGB();
+        int glow = new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 42).getRGB();
+        int arc = new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 255).getRGB();
+
+        RenderUtil.drawArcRing(cx, cy, radius, thickness, -90.0F, 360.0F, track);
+        if (sweep > 0.5F) {
+            RenderUtil.drawArcRing(cx, cy, radius, thickness * 2.4F, -90.0F, sweep, glow);
+            RenderUtil.drawArcRing(cx, cy, radius, thickness, -90.0F, sweep, arc);
+        }
+
+        GlStateManager.disableDepth();
+        GlStateManager.enableBlend();
+        GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(cx - FontManager.getStringWidth(countText) / 2.0F + 0.5F,
+                cy - FontManager.getFontHeight() / 2.0F + 1.0F, 0.0F);
+        FontManager.drawString(countText, 0.0F, 0.0F, new Color(255, 255, 255, 250).getRGB(), false);
+        GlStateManager.popMatrix();
+        GlStateManager.enableDepth();
+        GlStateManager.disableBlend();
     }
 
     @EventTarget

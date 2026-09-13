@@ -152,7 +152,7 @@ public class Velocity extends Module {
                 if (mode.getValue() == 1 && smartTimes.getValue()){
                     hitCount = computeReduceTicks((int) event.getX(), (int) event.getZ());
                 }
-                if (delay.getValue() && !groundDelay.getValue() && mc.thePlayer.onGround && event.getY() > 0.0){
+                if (delay.getValue() && event.getY() > 0.0){
                     if (jump.getValue() && (this.mode.getValue() == 1 || this.mode.getValue() == 2) && !mc.thePlayer.isBurning()){
                         jumpFlag = true;
                     }

@@ -127,11 +127,33 @@ public class RenderUtil {
         drawRoundedRectWithGl(x1, y1, x2, y2, radius, new Color(255, 255, 255, (int) (12.0F * alpha)).getRGB());
     }
 
+    public static void drawArcRing(float cx, float cy, float radius, float thickness, float startDeg, float sweepDeg, int color) {
+        if (sweepDeg <= 0.0F || thickness <= 0.0F) return;
+        float a = (color >> 24 & 255) / 255.0F;
+        float r = (color >> 16 & 255) / 255.0F;
+        float g = (color >> 8 & 255) / 255.0F;
+        float b = (color & 255) / 255.0F;
+        float inner = Math.max(0.0F, radius - thickness / 2.0F);
+        float outer = radius + thickness / 2.0F;
+        int segments = Math.max(3, (int) (Math.abs(sweepDeg) / 6.0F) + 1);
+        enableRenderState();
+        Tessellator tessellator = Tessellator.getInstance();
+        WorldRenderer wr = tessellator.getWorldRenderer();
+        wr.begin(GL11.GL_TRIANGLE_STRIP, DefaultVertexFormats.POSITION_COLOR);
+        for (int i = 0; i <= segments; i++) {
+            double angle = Math.toRadians(startDeg + sweepDeg * i / (double) segments);
+            float cos = (float) Math.cos(angle);
+            float sin = (float) Math.sin(angle);
+            wr.pos(cx + cos * outer, cy + sin * outer, 0).color(r, g, b, a).endVertex();
+            wr.pos(cx + cos * inner, cy + sin * inner, 0).color(r, g, b, a).endVertex();
+        }
+        tessellator.draw();
+        disableRenderState();
+    }
+
     public static void drawRoundedRectGradientH(float x, float y, float x2, float y2, float radius, int leftColor, int rightColor) {
         radius = Math.max(0.0F, Math.min(radius, Math.min(x2 - x, y2 - y) / 2.0F));
-        GlStateManager.enableBlend();
-        GlStateManager.disableTexture2D();
-        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+        enableRenderState();
         Tessellator tessellator = Tessellator.getInstance();
         WorldRenderer wr = tessellator.getWorldRenderer();
         wr.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_COLOR);
@@ -154,8 +176,7 @@ public class RenderUtil {
             drawArcGradientH(x + radius, y2 - radius, radius, 90, 180, leftColor, rightColor, x, x2);
             drawArcGradientH(x2 - radius, y2 - radius, radius, 0, 90, leftColor, rightColor, x, x2);
         }
-        GlStateManager.enableTexture2D();
-        GlStateManager.disableBlend();
+        disableRenderState();
     }
 
     private static void gradientVertexX(WorldRenderer wr, float x, float y, float xLeft, float xRight, int leftColor, int rightColor) {

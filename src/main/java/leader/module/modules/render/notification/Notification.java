@@ -632,9 +632,9 @@ public class Notification extends Module {
 
     private Color frostAccent(NoticeMode noticeMode) {
         switch (noticeMode) {
-            case Disable: return new Color(0xFF, 0x6B, 0x7E);
-            case Info: return new Color(0xFF, 0xC4, 0x6B);
-            default: return new Color(0x6F, 0xB2, 0xFF);
+            case Disable: return new Color(0xEF, 0x44, 0x44);
+            case Info: return new Color(0xF5, 0x9E, 0x0B);
+            default: return new Color(0x3B, 0x82, 0xF6);
         }
     }
 
@@ -648,13 +648,13 @@ public class Notification extends Module {
         boolean doBlur = this.blur.getValue();
         int max = Math.min(entries.size(), this.maxAlerts.getValue());
 
-        float cardHeight = 26.0F;
+        float cardHeight = 28.0F;
         float radius = 8.0F;
-        float barInset = 5.0F;
-        float padLeft = 12.0F;
-        float padRight = 10.0F;
-        float minWidth = 96.0F;
-        float maxWidth = 200.0F;
+        float dot = 6.0F;
+        float padLeft = 11.0F;
+        float padRight = 11.0F;
+        float minWidth = 104.0F;
+        float maxWidth = 210.0F;
         float textHeight = FontManager.getFontHeight() * textScale;
         float step = cardHeight + 5.0F;
         float reflow = 1.0F - (float) Math.exp(-0.0165F * 16.0F);
@@ -673,7 +673,7 @@ public class Notification extends Module {
             int ab = accent.getBlue();
 
             String name = entry.text;
-            float maxNameWidth = (maxWidth - padLeft - padRight) / textScale;
+            float maxNameWidth = (maxWidth - padLeft - padRight - dot - 7.0F) / textScale;
             if (FontManager.getStringWidth(name) > maxNameWidth) {
                 while (name.length() > 1 && FontManager.getStringWidth(name + "..") > maxNameWidth) {
                     name = name.substring(0, name.length() - 1);
@@ -682,7 +682,7 @@ public class Notification extends Module {
             }
 
             float cardWidth = Math.max(minWidth, Math.min(maxWidth,
-                    padLeft + FontManager.getStringWidth(name) * textScale + padRight));
+                    padLeft + dot + 7.0F + FontManager.getStringWidth(name) * textScale + padRight));
 
             int idx = max - 1 - i;
             float slide = (1.0F - alpha) * 14.0F;
@@ -706,16 +706,22 @@ public class Notification extends Module {
                 ShaderElement.addBlurTask(() -> RenderUtil.drawRoundedRectWithGl(bx, by, bx + bw, by + bh, br, -1));
             }
 
-            RenderUtil.drawZenGlass(x, y, x + cardWidth, y + cardHeight, radius, alpha);
-            RenderUtil.drawRoundedRectWithGl(x + 4.0F, y + barInset, x + 7.0F, y + cardHeight - barInset, 1.5F,
+            RenderUtil.drawGlass(x, y, x + cardWidth, y + cardHeight, radius, alpha);
+
+            float dotY = y + cardHeight / 2.0F;
+            RenderUtil.drawRoundedRectWithGl(x + padLeft - 1.0F, dotY - dot / 2.0F - 1.0F,
+                    x + padLeft + dot + 1.0F, dotY + dot / 2.0F + 1.0F, (dot + 2.0F) / 2.0F,
+                    new Color(ar, ag, ab, (int) (54.0F * alpha)).getRGB());
+            RenderUtil.drawRoundedRectWithGl(x + padLeft, dotY - dot / 2.0F,
+                    x + padLeft + dot, dotY + dot / 2.0F, dot / 2.0F,
                     new Color(ar, ag, ab, (int) (250.0F * alpha)).getRGB());
 
-            float lineY = y + cardHeight - 3.6F;
+            float lineY = y + cardHeight - 4.0F;
             float lineLeft = x + padLeft;
             float lineRight = x + cardWidth - padRight;
             RenderUtil.drawRoundedRectWithGl(lineLeft, lineY, lineRight, lineY + 1.6F,
                     Math.min(0.8F, (lineRight - lineLeft) / 2.0F),
-                    new Color(255, 255, 255, (int) (28.0F * alpha)).getRGB());
+                    new Color(20, 24, 34, (int) (24.0F * alpha)).getRGB());
             float remain = 1.0F - progress;
             if (remain > 0.004F) {
                 float fillRight = lineLeft + (lineRight - lineLeft) * remain;
@@ -728,13 +734,10 @@ public class Notification extends Module {
             GlStateManager.enableBlend();
             GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
-            float contentWidth = cardWidth - padLeft - padRight;
-            float textX = x + padLeft + Math.max(0.0F,
-                    (contentWidth - FontManager.getStringWidth(name) * textScale) / 2.0F);
             GlStateManager.pushMatrix();
-            GlStateManager.translate(textX, y + (cardHeight - textHeight) / 2.0F - 2.2F, 0.0F);
+            GlStateManager.translate(x + padLeft + dot + 7.0F, y + (cardHeight - textHeight) / 2.0F - 1.6F, 0.0F);
             GlStateManager.scale(textScale, textScale, 1.0F);
-            FontManager.drawString(name, 0.0F, 0.0F, new Color(244, 247, 252, (int) (238.0F * alpha)).getRGB(), false);
+            FontManager.drawString(name, 0.0F, 0.0F, new Color(20, 24, 34, (int) (238.0F * alpha)).getRGB(), false);
             GlStateManager.popMatrix();
 
             GlStateManager.enableDepth();
@@ -743,6 +746,7 @@ public class Notification extends Module {
 
         GlStateManager.popMatrix();
     }
+
 
     private void drawStatusIcon(float x, float y, float iconSize, NoticeMode noticeMode, Color themeColor, float alpha) {
         GlStateManager.pushMatrix();
