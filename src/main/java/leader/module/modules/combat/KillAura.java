@@ -779,6 +779,7 @@ public class KillAura extends Module {
                                             switch (this.blockTick) {
                                                 case 0:
                                                     Leader.blinkManager.setBlinkState(false,BlinkModules.AUTO_BLOCK);
+                                                    blocked = true;
                                                     if (!this.isPlayerBlocking()) {
                                                         swap = true;
                                                     }
@@ -789,7 +790,6 @@ public class KillAura extends Module {
                                                     blockTick = 2;
                                                     break;
                                                 case 2:
-                                                    Leader.blinkManager.setBlinkState(true,BlinkModules.AUTO_BLOCK);
                                                     if (this.isPlayerBlocking()) {
                                                         this.stopBlock();
                                                     }
