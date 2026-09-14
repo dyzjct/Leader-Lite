@@ -16,10 +16,17 @@ public abstract class Shader {
 
     private int compileShader(String source, int type) {
         int shader = GL20.glCreateShader(type);
+        if (shader == 0) {
+            return -1;
+        }
         GL20.glShaderSource(shader, source);
         GL20.glCompileShader(shader);
         int compile = GL20.glGetShaderi(shader, GL20.GL_COMPILE_STATUS);
-        return compile == 0 ? -1 : shader;
+        if (compile == 0) {
+            GL20.glDeleteShader(shader);
+            return -1;
+        }
+        return shader;
     }
 
     private void createProgram(String fragment) {
@@ -37,6 +44,11 @@ public abstract class Shader {
         }
 
         this.programId = GL20.glCreateProgram();
+        if (this.programId == 0) {
+            GL20.glDeleteShader(vertexShader);
+            GL20.glDeleteShader(fragmentShader);
+            return;
+        }
         GL20.glAttachShader(this.programId, vertexShader);
         GL20.glAttachShader(this.programId, fragmentShader);
         GL20.glLinkProgram(this.programId);

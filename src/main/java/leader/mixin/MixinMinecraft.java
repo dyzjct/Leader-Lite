@@ -65,14 +65,14 @@ public abstract class MixinMinecraft {
     }
     @Redirect(method = "launchIntegratedServer", at = @At(value = "INVOKE", target = "Ljava/lang/System;gc()V"))
     public void gc1() {
-        if (!BetterFPS.using || !BetterFPS.fastLoad.getValue()) {
+        if (!BetterFPS.fastLoad.getValue()) {
             System.gc();
         }
     }
 
     @Redirect(method = "loadWorld(Lnet/minecraft/client/multiplayer/WorldClient;Ljava/lang/String;)V", at = @At(value = "INVOKE", target = "Ljava/lang/System;gc()V"))
     public void gc2() {
-        if (!BetterFPS.using || !BetterFPS.fastLoad.getValue()) {
+        if (!BetterFPS.fastLoad.getValue()) {
             System.gc();
         }
     }

@@ -15,10 +15,10 @@ import java.util.List;
 
 public class KawaseBlur {
 
-    public static KawaseDownShader kawaseDown = new KawaseDownShader();
-    public static KawaseUpShader kawaseUp = new KawaseUpShader();
+    public static KawaseDownShader kawaseDown;
+    public static KawaseUpShader kawaseUp;
 
-    public static Framebuffer framebuffer = new Framebuffer(1, 1, false);
+    public static Framebuffer framebuffer;
 
     private static int currentIterations;
     private static final List<Framebuffer> framebufferList = new ArrayList<>();
@@ -46,11 +46,16 @@ public class KawaseBlur {
 
     public static void renderBlur(int stencilFrameBufferTexture, int iterations, int offset) {
         Minecraft mc = Minecraft.getMinecraft();
+        if (kawaseDown == null || kawaseUp == null) {
+            kawaseDown = new KawaseDownShader();
+            kawaseUp = new KawaseUpShader();
+        }
         if (iterations < 1 || mc.displayWidth < 1 || mc.displayHeight < 1
                 || !kawaseDown.isUsable() || !kawaseUp.isUsable()) {
             return;
         }
-        if (currentIterations != iterations || framebuffer.framebufferWidth != mc.displayWidth || framebuffer.framebufferHeight != mc.displayHeight) {
+        if (framebuffer == null || currentIterations != iterations
+                || framebuffer.framebufferWidth != mc.displayWidth || framebuffer.framebufferHeight != mc.displayHeight) {
             initFramebuffers(iterations);
             currentIterations = iterations;
         }

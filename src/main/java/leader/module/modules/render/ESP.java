@@ -20,8 +20,12 @@ import leader.property.properties.ModeProperty;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.shader.Framebuffer;
 import net.minecraft.entity.player.EntityPlayer;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL20;
 
 import javax.vecmath.Vector4d;
 import java.awt.*;
@@ -30,8 +34,8 @@ import java.util.stream.Collectors;
 
 public class ESP extends Module {
     private static final Minecraft mc = Minecraft.getMinecraft();
-    private final OutlineShader outlineRenderer = new OutlineShader();
-    private final GlowShader glowShader = new GlowShader();
+    private OutlineShader outlineRenderer;
+    private GlowShader glowShader;
     private Framebuffer framebuffer = null;
     private boolean outline = true;
     private boolean glow = true;
@@ -101,8 +105,8 @@ public class ESP extends Module {
     public void onResize(ResizeEvent event) {
         if (this.framebuffer != null) {
             this.framebuffer.deleteFramebuffer();
+            this.framebuffer = null;
         }
-        this.framebuffer = new Framebuffer(mc.displayWidth, mc.displayHeight, false);
     }
 
     @EventTarget(Priority.HIGH)
@@ -111,40 +115,7 @@ public class ESP extends Module {
             List<EntityPlayer> renderedEntities = TeamUtil.getLoadedEntitiesSorted().stream().filter(entity -> entity instanceof EntityPlayer && this.shouldRenderPlayer((EntityPlayer) entity)).map(EntityPlayer.class::cast).collect(Collectors.toList());
             if (!renderedEntities.isEmpty()) {
                 if (this.mode.getValue() == 3) {
-                    GlStateManager.pushMatrix();
-                    GlStateManager.pushAttrib();
-                    if (this.framebuffer == null) {
-                        this.framebuffer = new Framebuffer(mc.displayWidth, mc.displayHeight, false);
-                    }
-                    this.framebuffer.bindFramebuffer(false);
-                    ((IAccessorEntityRenderer) mc.entityRenderer).callSetupCameraTransform(event.getPartialTicks(), 0);
-                    boolean shadow = mc.gameSettings.entityShadows;
-                    mc.gameSettings.entityShadows = false;
-                    this.outline = false;
-                    this.glow = false;
-                    this.glowShader.use();
-                    for (EntityPlayer player : renderedEntities) {
-                        Color entityColor = this.getEntityColor(player);
-                        this.glowShader.W(entityColor);
-                        boolean invisible = player.isInvisible();
-                        player.setInvisible(false);
-                        mc.getRenderManager().renderEntityStatic(player, event.getPartialTicks(), true);
-                        player.setInvisible(invisible);
-                    }
-                    this.glowShader.stop();
-                    this.glow = true;
-                    this.outline = true;
-                    mc.gameSettings.entityShadows = shadow;
-                    mc.entityRenderer.disableLightmap();
-                    mc.entityRenderer.setupOverlayRendering();
-                    mc.getFramebuffer().bindFramebuffer(false);
-                    this.outlineRenderer.use();
-                    RenderUtil.drawFramebuffer(this.framebuffer);
-                    this.outlineRenderer.stop();
-                    this.framebuffer.framebufferClear();
-                    mc.getFramebuffer().bindFramebuffer(false);
-                    GlStateManager.popAttrib();
-                    GlStateManager.popMatrix();
+                    this.renderOutline(renderedEntities, event.getPartialTicks());
                 }
                 if (this.mode.getValue() == 1 || this.healthBar.getValue() == 1) {
                     RenderUtil.enableRenderState();
@@ -180,6 +151,85 @@ public class ESP extends Module {
                     RenderUtil.disableRenderState();
                 }
             }
+        }
+    }
+
+    private void renderOutline(List<EntityPlayer> renderedEntities, float partialTicks) {
+        if (!OpenGlHelper.isFramebufferEnabled() || mc.displayWidth < 1 || mc.displayHeight < 1) {
+            return;
+        }
+        if (this.outlineRenderer == null) {
+            this.outlineRenderer = new OutlineShader();
+        }
+        if (this.glowShader == null) {
+            this.glowShader = new GlowShader();
+        }
+        if (!this.outlineRenderer.isUsable() || !this.glowShader.isUsable()) {
+            return;
+        }
+        if (this.framebuffer == null || this.framebuffer.framebufferWidth != mc.displayWidth
+                || this.framebuffer.framebufferHeight != mc.displayHeight) {
+            if (this.framebuffer != null) {
+                this.framebuffer.deleteFramebuffer();
+            }
+            this.framebuffer = new Framebuffer(mc.displayWidth, mc.displayHeight, false);
+        }
+
+        boolean shadow = mc.gameSettings.entityShadows;
+        int previousProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+        int previousActiveTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        int previousTexture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+        try {
+            GlStateManager.pushMatrix();
+            GlStateManager.pushAttrib();
+            this.framebuffer.framebufferClear();
+            this.framebuffer.bindFramebuffer(false);
+            ((IAccessorEntityRenderer) mc.entityRenderer).callSetupCameraTransform(partialTicks, 0);
+            mc.gameSettings.entityShadows = false;
+            this.outline = false;
+            this.glow = false;
+            GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
+            this.glowShader.use();
+            for (EntityPlayer player : renderedEntities) {
+                Color entityColor = this.getEntityColor(player);
+                this.glowShader.W(entityColor);
+                boolean invisible = player.isInvisible();
+                try {
+                    player.setInvisible(false);
+                    mc.getRenderManager().renderEntityStatic(player, partialTicks, true);
+                } finally {
+                    player.setInvisible(invisible);
+                }
+            }
+            this.glowShader.stop();
+            mc.entityRenderer.disableLightmap();
+            mc.entityRenderer.setupOverlayRendering();
+            mc.getFramebuffer().bindFramebuffer(false);
+            GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
+            GlStateManager.enableTexture2D();
+            GlStateManager.enableBlend();
+            GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GlStateManager.disableDepth();
+            GlStateManager.depthMask(false);
+            GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+            this.outlineRenderer.use();
+            RenderUtil.drawFramebuffer(this.framebuffer);
+            this.outlineRenderer.stop();
+        } finally {
+            GL20.glUseProgram(previousProgram);
+            this.outline = true;
+            this.glow = true;
+            mc.gameSettings.entityShadows = shadow;
+            mc.getFramebuffer().bindFramebuffer(false);
+            GL13.glActiveTexture(previousActiveTexture);
+            GlStateManager.bindTexture(previousTexture);
+            GlStateManager.depthMask(true);
+            GlStateManager.enableDepth();
+            GlStateManager.enableAlpha();
+            GlStateManager.enableTexture2D();
+            GlStateManager.resetColor();
+            GlStateManager.popAttrib();
+            GlStateManager.popMatrix();
         }
     }
 

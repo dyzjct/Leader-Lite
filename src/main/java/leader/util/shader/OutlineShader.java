@@ -6,23 +6,22 @@ import org.lwjgl.opengl.GL20;
 public class OutlineShader extends Shader {
     private static final String shader = String.join(
             "\n",
+            "#version 120",
             "uniform sampler2D texture;",
             "uniform vec2 size;",
-            "uniform float radius;",
             "void main(void) {",
-            "vec4 xy = texture2D(texture, gl_TexCoord[0].xy);",
-            "if(xy.a != 0) {",
-            "gl_FragColor = vec4(0, 0, 0, 0);",
-            "} else {",
-            "for (float x = -radius; x <= radius; x++) {",
-            "for (float y = -radius; y <= radius; y++) {",
-            "vec4 color = texture2D(texture, gl_TexCoord[0].xy + vec2(size.x * x, size.y * y));",
-            "if (color.a != 0) {",
-            "gl_FragColor = color;",
+            "vec2 uv = gl_TexCoord[0].st;",
+            "vec4 center = texture2D(texture, uv);",
+            "vec4 outline = vec4(0.0);",
+            "for (int x = -2; x <= 2; x++) {",
+            "for (int y = -2; y <= 2; y++) {",
+            "vec4 sample = texture2D(texture, uv + vec2(float(x), float(y)) * size);",
+            "if (sample.a > outline.a) {",
+            "outline = sample;",
             "}",
             "}",
             "}",
-            "}",
+            "gl_FragColor = center.a > 0.0 ? vec4(0.0) : outline;",
             "}"
     );
 
@@ -34,7 +33,6 @@ public class OutlineShader extends Shader {
     public void onLink() {
         this.setUniform("texture");
         this.setUniform("size");
-        this.setUniform("radius");
     }
 
     @Override
@@ -46,7 +44,5 @@ public class OutlineShader extends Shader {
         float invW = 1.0f / Minecraft.getMinecraft().displayWidth;
         float invH = 1.0f / Minecraft.getMinecraft().displayHeight;
         GL20.glUniform2f(sizeLoc, invW, invH);
-        int radiusLoc = this.getUniformLocationCached("radius");
-        GL20.glUniform1f(radiusLoc, 2.0f);
     }
 }
